@@ -146,6 +146,4 @@ class AuthWrapper extends ConsumerWidget {
     );
   }
 }
-    );
-  }
 }
