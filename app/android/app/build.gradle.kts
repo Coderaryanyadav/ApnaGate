@@ -9,7 +9,7 @@ plugins {
 }
 
 android {
-    namespace = "com.antigravity.crescentgate.app"
+    namespace = "com.crescentgate.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
