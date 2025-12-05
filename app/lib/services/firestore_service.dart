@@ -366,4 +366,24 @@ class FirestoreService {
         .snapshots()
         .map((s) => s.docs.map((d) => {'id': d.id, ...d.data()}).toList());
   }
+  Future<void> cleanupNonEssentialUsers() async {
+    final snapshot = await _usersRef.get();
+    final batch = _firestore.batch();
+    
+    for (var doc in snapshot.docs) {
+      final data = doc.data();
+      final role = data['role'];
+      final wing = data['wing'];
+      final flat = data['flatNumber'];
+      
+      final isAdmin = role == 'admin';
+      final isGuard = role == 'guard';
+      final isTestUser = (wing == 'A' && flat == '101');
+      
+      if (!isAdmin && !isGuard && !isTestUser) {
+        batch.delete(doc.reference);
+      }
+    }
+    await batch.commit();
+  }
 }

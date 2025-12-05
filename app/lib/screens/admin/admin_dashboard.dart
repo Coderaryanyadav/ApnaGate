@@ -163,27 +163,21 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                       final guards = stats['guards'] ?? 0;
                       final total = stats['total'] ?? 0;
                       
-                      return FutureBuilder<List<dynamic>>(
-                        future: ref.read(firestoreServiceProvider).getUniqueWings(),
-                        builder: (context, wingsSnapshot) {
-                          final wings = wingsSnapshot.data ?? [];
-                          final wingsText = wings.isEmpty ? 'N/A' : wings.join(', ');
+                      const wingsText = 'A & B';
 
-                          return GridView.count(
-                            crossAxisCount: 2,
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            mainAxisSpacing: 12,
-                            crossAxisSpacing: 12,
-                            childAspectRatio: 1.5,
-                            children: [
-                              _StatCard(title: 'Total Residents', value: '$residents', icon: Icons.home, color: Colors.indigo),
-                              _StatCard(title: 'Active Guards', value: '$guards', icon: Icons.security, color: Colors.green),
-                              _StatCard(title: 'Total Users', value: '$total', icon: Icons.people, color: Colors.orange),
-                              _StatCard(title: 'Wings', value: wingsText, icon: Icons.apartment, color: Colors.purple),
-                            ],
-                          );
-                        },
+                      return GridView.count(
+                        crossAxisCount: 2,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 1.5,
+                        children: [
+                          _StatCard(title: 'Total Residents', value: '$residents', icon: Icons.home, color: Colors.indigo),
+                          _StatCard(title: 'Active Guards', value: '$guards', icon: Icons.security, color: Colors.green),
+                          _StatCard(title: 'Total Users', value: '$total', icon: Icons.people, color: Colors.orange),
+                          _StatCard(title: 'Wings', value: wingsText, icon: Icons.apartment, color: Colors.purple),
+                        ],
                       );
                     },
                   ),

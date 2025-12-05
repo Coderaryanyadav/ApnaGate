@@ -91,7 +91,7 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
         child: CustomScrollView(
           slivers: [
             SliverAppBar(
-              title: const Text('📅 Today\'s Log'),
+              title: const Text('Today\'s Log'),
               // Default dark theme
               elevation: 0,
               floating: true,
@@ -161,7 +161,13 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
                 logs = logs.where((log) {
                   final matchesSearch = log.visitorName.toLowerCase().contains(_searchQuery);
                   final matchesStatus = _statusFilter == 'all' || log.status == _statusFilter;
-                  return matchesSearch && matchesStatus;
+                  
+                  // 🕒 Date Filter: TODAY ONLY
+                  final now = DateTime.now();
+                  final startOfDay = DateTime(now.year, now.month, now.day);
+                  final isToday = log.createdAt.isAfter(startOfDay); 
+                  
+                  return matchesSearch && matchesStatus && isToday;
                 }).toList();
 
                 if (logs.isEmpty) {

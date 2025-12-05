@@ -65,7 +65,41 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     final usersStream = ref.watch(firestoreServiceProvider).getUsersByRole(_selectedRole);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('User Management')),
+      appBar: AppBar(
+        title: const Text('User Management'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep, color: Colors.orange),
+            tooltip: 'Reset Data',
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('⚠️ RESET DATA'),
+                  content: const Text(
+                      'This will DELETE ALL USERS except Admins, Guards, and Resident A-101.\n\nThis action cannot be undone.'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('DELETE ALL'),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirm == true) {
+                await ref.read(firestoreServiceProvider).cleanupNonEssentialUsers();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Cleanup Complete. Only Admin, Guards, A-101 remain.')));
+                }
+              }
+            },
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(

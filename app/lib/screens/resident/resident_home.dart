@@ -129,9 +129,15 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Welcome Home 🏠', 
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)
+                  FutureBuilder<AppUser?>(
+                    future: ref.read(firestoreServiceProvider).getUser(ref.read(authServiceProvider).currentUser!.uid),
+                    builder: (context, snapshot) {
+                      final name = snapshot.data?.name ?? 'Resident'; // Fallback
+                      return Text(
+                        'Welcome Home, $name', 
+                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)
+                      );
+                    },
                   ),
                   const SizedBox(height: 20),
                   

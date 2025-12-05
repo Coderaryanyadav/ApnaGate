@@ -17,8 +17,13 @@ class ComplaintListScreen extends ConsumerWidget {
       body: StreamBuilder<List<Complaint>>(
         stream: ref.watch(firestoreServiceProvider).getUserComplaints(user.uid),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final complaints = snapshot.data!;
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+           if (snapshot.hasError) {
+             return Center(child: Text('Error: ${snapshot.error}'));
+           }
+          final complaints = snapshot.data ?? [];
 
           if (complaints.isEmpty) {
             return Center(
