@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/auth_service.dart';
+import '../../services/firestore_service.dart';
+import '../../models/extras.dart';
 import '../../widgets/banner_ad_widget.dart';
 import 'approval_screen.dart';
 import 'visitor_history.dart';
@@ -19,6 +21,7 @@ class ResidentHome extends ConsumerStatefulWidget {
 
 class _ResidentHomeState extends ConsumerState<ResidentHome> {
   int _currentIndex = 0;
+  bool _hasShownNoticePopup = false;
 
   final List<Widget> _screens = [
     const ApprovalScreen(),
@@ -26,6 +29,75 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> {
     const GuestPassScreen(),
     const SOSScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Show latest notice popup after widget builds
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndShowLatestNotice();
+    });
+  }
+
+  Future<void> _checkAndShowLatestNotice() async {
+    if (_hasShownNoticePopup) return;
+    
+    try {
+      final notices = await ref.read(firestoreServiceProvider).getNotices().first;
+      
+      if (notices.isNotEmpty && mounted) {
+        _hasShownNoticePopup = true;
+        final latestNotice = notices.first;
+        
+        _showNoticePopup(latestNotice);
+      }
+    } catch (e) {
+      // Silently fail if no notices
+    }
+  }
+
+  void _showNoticePopup(Notice notice) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              notice.type == 'alert' ? Icons.warning : Icons.announcement,
+              color: notice.type == 'alert' ? Colors.orange : Colors.indigo,
+            ),
+            const SizedBox(width: 8),
+            const Text('New Notice'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              notice.title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Text(notice.description),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Dismiss'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const NoticeListScreen()));
+            },
+            child: const Text('View All Notices'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

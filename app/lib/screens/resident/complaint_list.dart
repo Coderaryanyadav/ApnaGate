@@ -68,7 +68,7 @@ class ComplaintListScreen extends ConsumerWidget {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddDialog(context, ref, user.uid),
+        onPressed: () => _showAddDialog(context, ref),
         label: const Text('Raise Complaint'),
         icon: const Icon(Icons.report_problem),
         backgroundColor: Colors.redAccent,
@@ -93,52 +93,100 @@ class ComplaintListScreen extends ConsumerWidget {
     }
   }
 
-  void _showAddDialog(BuildContext context, WidgetRef ref, String uid) async {
-    final titleController = TextEditingController();
-    final descController = TextEditingController();
-
-    // Need flat number. Fetch current user from firestore to be sure?
-    // Optimization: Assume user knows their flat or auto-fetch.
-    // For now, let's just make them type title/desc. Flat number can be fetched in logic or stored in AppUser.
+  void _showAddDialog(BuildContext context, WidgetRef ref) async {
+    final user = ref.read(authServiceProvider).currentUser;
+    if (user == null) return;
     
-    // Fetch AppUser to get Flat Number
-    final appUser = await ref.read(firestoreServiceProvider).getUser(uid);
-    if (appUser == null) return;
+    // Fetch user's flat number
+    final appUser = await ref.read(firestoreServiceProvider).getUser(user.uid);
+    if (appUser == null || !context.mounted) return;
 
-    if (context.mounted) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
+    String selectedCategory = 'Plumbing Issue';
+    final categories = [
+      'Plumbing Issue',
+      'Electricity Problem',
+      'Neighbour Disturbance',
+      'Staff Misbehavior',
+      'Other',
+    ];
+    
+    String description = '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
           title: const Text('Raise Complaint'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Issue (e.g. Leaking Tap)')),
-              const SizedBox(height: 8),
-              TextField(controller: descController, decoration: const InputDecoration(labelText: 'Details'), maxLines: 3),
+              // Category Dropdown
+              DropdownButtonFormField<String>(
+                value: selectedCategory,
+                decoration: const InputDecoration(
+                  labelText: 'Category',
+                  prefixIcon: Icon(Icons.category),
+                  border: OutlineInputBorder(),
+                ),
+                items: categories.map((cat) {
+                  return DropdownMenuItem(value: cat, child: Text(cat));
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() => selectedCategory = val);
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              // Description
+              TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  hintText: 'Provide details about the issue...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 4,
+                onChanged: (val) => description = val,
+              ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () async {
-                 if (titleController.text.isEmpty) return;
-                 await ref.read(firestoreServiceProvider).addComplaint(Complaint(
-                   id: '',
-                   title: titleController.text,
-                   description: descController.text,
-                   residentId: uid,
-                   flatNumber: "${appUser.wing}-${appUser.flatNumber}", // Combine Wing-Flat
-                   status: 'open',
-                   createdAt: DateTime.now(),
-                 ));
-                 if (context.mounted) Navigator.pop(context);
+                if (description.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please provide a description')),
+                  );
+                  return;
+                }
+
+                final complaint = Complaint(
+                  id: '',
+                  residentId: user.uid,
+                  flatNumber: "${appUser.wing}-${appUser.flatNumber}",
+                  title: selectedCategory,
+                  description: description,
+                  status: 'open',
+                  createdAt: DateTime.now(),
+                );
+
+                await ref.read(firestoreServiceProvider).addComplaint(complaint);
+                if (context.mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Complaint submitted successfully')),
+                  );
+                }
               },
-              child: const Text('SUBMIT'),
+              child: const Text('Submit'),
             ),
           ],
         ),
-      );
-    }
+      ),
+    );
   }
 }
