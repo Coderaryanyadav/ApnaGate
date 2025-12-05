@@ -22,10 +22,7 @@ class AuthWrapper extends ConsumerWidget {
           return const LoginScreen();
         }
 
-        // Initialize Notifications in background
-        Future.microtask(() {
-          ref.read(notificationServiceProvider).initialize(user.uid);
-        });
+
 
         // Fetch user role
         return FutureBuilder<AppUser?>(
