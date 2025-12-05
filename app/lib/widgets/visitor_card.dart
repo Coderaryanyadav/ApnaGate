@@ -22,30 +22,37 @@ class VisitorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 🎨 Color & Icon Logic
-    final isDelivery = request.purpose.toLowerCase().contains('delivery');
-    final isGuest = request.purpose.toLowerCase().contains('guest');
-    final isCab = request.purpose.toLowerCase().contains('cab');
+    final purp = request.purpose.toLowerCase();
+    final isDelivery = purp.contains('delivery');
+    final isGuest = purp.contains('guest');
+    final isCab = purp.contains('cab');
     
     Color typeColor = Colors.grey;
     IconData typeIcon = Icons.info;
+    // Strip Emojis
+    String cleanPurpose = request.purpose.replaceAll(RegExp(r'[^\x00-\x7F]+'), '').trim().toUpperCase();
+    if (cleanPurpose.isEmpty) cleanPurpose = "VISITOR";
 
     if (isDelivery) { typeColor = Colors.orange; typeIcon = Icons.local_shipping; }
     else if (isGuest) { typeColor = Colors.blue; typeIcon = Icons.people; }
     else if (isCab) { typeColor = Colors.yellow.shade800; typeIcon = Icons.local_taxi; }
     else { typeColor = Colors.purple; typeIcon = Icons.build; }
 
+    final cardColor = Theme.of(context).cardTheme.color ?? const Color(0xFF1E1E1E);
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 8), // Margin handled by parent mostly, but keeping vertical
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withOpacity(0.2),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
+        border: Border.all(color: Colors.white10),
       ),
       child: Column(
         children: [
@@ -64,14 +71,14 @@ class VisitorCard extends StatelessWidget {
                     Icon(typeIcon, size: 16, color: typeColor),
                     const SizedBox(width: 6),
                     Text(
-                      request.purpose.toUpperCase(),
+                      cleanPurpose,
                       style: TextStyle(color: typeColor, fontWeight: FontWeight.bold, fontSize: 12),
                     ),
                   ],
                 ),
                 Text(
                   _formatTime(request.createdAt),
-                  style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w600),
+                  style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -84,7 +91,7 @@ class VisitorCard extends StatelessWidget {
               children: [
                 // 📸 Photo (Base64) with Hero Animation
                 GestureDetector(
-                  onTap: () => _showFullScreenImage(context, request.photoUrl),
+                  onTap: () => _showFullScreenImage(context, request.photoUrl, 'photo_${request.id}'),
                   child: Hero(
                     tag: 'photo_${request.id}',
                     child: Container(
@@ -92,8 +99,8 @@ class VisitorCard extends StatelessWidget {
                       height: 70,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade200),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
+                        border: Border.all(color: Colors.white24),
+                        color: Colors.black,
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
@@ -102,42 +109,39 @@ class VisitorCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                
                 const SizedBox(width: 16),
                 
-                // 📝 Info
+                // 📝 Details
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         request.visitorName,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
-                      Row(
+                       Row(
                         children: [
-                          const Icon(Icons.phone, size: 14, color: Colors.grey),
+                          const Icon(Icons.phone, size: 14, color: Colors.white54),
                           const SizedBox(width: 4),
                           GestureDetector(
-                            onTap: () => _callNumber(request.visitorPhone),
+                            onTap: () => launchUrl(Uri.parse('tel:${request.visitorPhone}')),
                             child: Text(
                               request.visitorPhone,
-                              style: const TextStyle(fontSize: 14, color: Colors.blue, decoration: TextDecoration.underline),
+                              style: const TextStyle(color: Colors.blueAccent, decoration: TextDecoration.underline),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(Icons.apartment, size: 14, color: Colors.grey),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Flat ${request.flatNumber}',
-                            style: const TextStyle(fontSize: 14, color: Colors.black54, fontWeight: FontWeight.w600),
-                          ),
-                        ],
+                      Text('Status: ${request.status.toUpperCase()}', 
+                        style: TextStyle(
+                          color: _getStatusColor(request.status), 
+                          fontWeight: FontWeight.bold, 
+                          fontSize: 12
+                        )
                       ),
                     ],
                   ),
@@ -149,29 +153,38 @@ class VisitorCard extends StatelessWidget {
             ),
           ),
 
-          // ⚡ Actions (Only if Pending & showActions=true)
-          if (showActions && request.status == 'pending') ...[
-            const Divider(height: 1),
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: onReject,
-                    icon: const Icon(Icons.close, color: Colors.red),
-                    label: const Text('REJECT', style: TextStyle(color: Colors.red)),
+          // ⚡ Actions (Approve/Reject) or Active Status
+          if (showActions && request.status == 'pending')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onReject,
+                      icon: const Icon(Icons.close),
+                      label: const Text('REJECT'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        side: const BorderSide(color: Colors.red),
+                      ),
+                    ),
                   ),
-                ),
-                Container(width: 1, height: 40, color: Colors.grey.shade200),
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: onApprove,
-                    icon: const Icon(Icons.check, color: Colors.green),
-                    label: const Text('APPROVE', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: onApprove,
+                      icon: const Icon(Icons.check),
+                      label: const Text('APPROVE'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ],
         ],
       ),
     );
@@ -179,19 +192,26 @@ class VisitorCard extends StatelessWidget {
 
   // --- Helpers ---
 
-  Widget _buildImage(String data) {
-    if (data.startsWith('http')) return Image.network(data, fit: BoxFit.cover);
+  Widget _buildImage(String? base64String) {
+    if (base64String == null || base64String.isEmpty) {
+      return const Center(child: Icon(Icons.person, color: Colors.white54));
+    }
     try {
-      return Image.memory(base64Decode(data), fit: BoxFit.cover);
+      return Image.memory(
+        base64Decode(base64String),
+        fit: BoxFit.cover,
+        errorBuilder: (_,__,___) => const Center(child: Icon(Icons.broken_image, color: Colors.white54)),
+      );
     } catch (e) {
-      return Container(color: Colors.grey[200], child: const Icon(Icons.person, color: Colors.grey));
+      return const Center(child: Icon(Icons.error, color: Colors.white54));
     }
   }
 
   Color _getStatusColor(String status) {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'approved': return Colors.green;
       case 'rejected': return Colors.red;
+      case 'exited': return Colors.grey;
       default: return Colors.orange;
     }
   }
@@ -208,23 +228,20 @@ class VisitorCard extends StatelessWidget {
   }
 
   String _formatTime(DateTime dt) {
-    return DateFormat('h:mm a').format(dt);
+    return DateFormat('hh:mm a').format(dt);
   }
 
-  void _callNumber(String phone) {
-    launchUrl(Uri.parse('tel:$phone'));
-  }
-
-  void _showFullScreenImage(BuildContext context, String data) {
+  void _showFullScreenImage(BuildContext context, String? photoUrl, String heroTag) {
+    if (photoUrl == null || photoUrl.isEmpty) return;
     Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(
       backgroundColor: Colors.black,
       body: PhotoView(
-        imageProvider: data.startsWith('http')
-            ? NetworkImage(data) as ImageProvider
-            : MemoryImage(base64Decode(data)),
+        imageProvider: photoUrl.startsWith('http')
+            ? NetworkImage(photoUrl) as ImageProvider
+            : MemoryImage(base64Decode(photoUrl)),
         minScale: PhotoViewComputedScale.contained,
         maxScale: PhotoViewComputedScale.covered * 2,
-        heroAttributes: PhotoViewHeroAttributes(tag: 'photo_$data'),
+        heroAttributes: PhotoViewHeroAttributes(tag: heroTag),
         backgroundDecoration: const BoxDecoration(color: Colors.black),
       ),
       appBar: AppBar(backgroundColor: Colors.transparent, iconTheme: const IconThemeData(color: Colors.white)),

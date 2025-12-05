@@ -20,15 +20,7 @@ class ResidentHome extends ConsumerStatefulWidget {
 }
 
 class _ResidentHomeState extends ConsumerState<ResidentHome> {
-  int _currentIndex = 0;
   bool _hasShownNoticePopup = false;
-
-  final List<Widget> _screens = [
-    const ApprovalScreen(),
-    const VisitorHistoryScreen(),
-    const GuestPassScreen(),
-    const SOSScreen(),
-  ];
 
   @override
   void initState() {
@@ -116,28 +108,12 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> {
           padding: EdgeInsets.zero,
           children: [
             const UserAccountsDrawerHeader(
-              decoration: BoxDecoration(color: Colors.indigo),
-              accountName: Text('Crescent Gate'),
-              accountEmail: Text('Resident Portal'),
-              currentAccountPicture: CircleAvatar(backgroundColor: Colors.white, child: Icon(Icons.home, color: Colors.indigo)),
+              decoration: BoxDecoration(color: Color(0xFF1E1E1E)), // Dark Header
+              accountName: Text('Crescent Gate', style: TextStyle(color: Colors.white)),
+              accountEmail: Text('Resident Portal', style: TextStyle(color: Colors.white70)),
+              currentAccountPicture: CircleAvatar(backgroundColor: Colors.indigo, child: Icon(Icons.home, color: Colors.white)),
             ),
-            ListTile(
-              leading: const Icon(Icons.announcement),
-              title: const Text('Building Notices'),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NoticeListScreen())),
-            ),
-            ListTile(
-              leading: const Icon(Icons.report_problem),
-              title: const Text('My Complaints'),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ComplaintListScreen())),
-            ),
-            ListTile(
-              leading: const Icon(Icons.handyman),
-              title: const Text('Service Directory'),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ServiceDirectoryScreen())),
-            ),
-            const Divider(),
-            ListTile(
+             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
               title: const Text('Logout', style: TextStyle(color: Colors.red)),
               onTap: () => ref.read(authServiceProvider).signOut(),
@@ -147,38 +123,147 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> {
       ),
       body: Column(
         children: [
-          Expanded(child: _screens[_currentIndex]),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Welcome Home 🏠', 
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  // 6-Button Grid
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    childAspectRatio: 1.1,
+                    children: [
+                      // 1. Approvals
+                      _DashboardCard(
+                        icon: Icons.check_circle_outline,
+                        label: 'Approvals',
+                        color: Colors.green,
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ApprovalScreen())),
+                      ),
+                      // 2. Gate Pass
+                      _DashboardCard(
+                        icon: Icons.qr_code_2,
+                        label: 'Gate Pass',
+                        color: Colors.blue,
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GuestPassScreen())),
+                      ),
+                      // 3. Building Notices
+                      _DashboardCard(
+                        icon: Icons.announcement,
+                        label: 'Notices',
+                        color: Colors.orange,
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NoticeListScreen())),
+                      ),
+                       // 4. My Complaints
+                      _DashboardCard(
+                        icon: Icons.report_problem,
+                        label: 'Complaints',
+                        color: Colors.amber,
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ComplaintListScreen())),
+                      ),
+                       // 5. Service Directory
+                      _DashboardCard(
+                        icon: Icons.handyman,
+                        label: 'Services',
+                        color: Colors.purple,
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ServiceDirectoryScreen())),
+                      ),
+                      // 6. SOS (Red)
+                      _DashboardCard(
+                        icon: Icons.sos,
+                        label: 'SOS Alert',
+                        color: Colors.red,
+                        isAlert: true,
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SOSScreen())),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  // Visitor History Link
+                  ListTile(
+                    tileColor: const Color(0xFF1E1E1E),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    leading: const Icon(Icons.history, color: Colors.white),
+                    title: const Text('View Visitor History', style: TextStyle(color: Colors.white)),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white54),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VisitorHistoryScreen())),
+                  ),
+                ],
+              ),
+            ),
+          ),
           const SafeArea(
             top: false,
             child: BannerAdWidget(),
           ),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) => setState(() => _currentIndex = index),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.check_circle_outline),
-            selectedIcon: Icon(Icons.check_circle),
-            label: 'Approvals',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.history_outlined),
-            selectedIcon: Icon(Icons.history),
-            label: 'History',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.qr_code_2_outlined),
-            selectedIcon: Icon(Icons.qr_code_2),
-            label: 'Pass',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.sos_outlined),
-            selectedIcon: Icon(Icons.sos, color: Colors.red),
-            label: 'SOS',
-          ),
-        ],
+    );
+  }
+}
+
+class _DashboardCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  final bool isAlert;
+
+  const _DashboardCard({
+    required this.icon, 
+    required this.label, 
+    required this.color, 
+    required this.onTap,
+    this.isAlert = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: isAlert ? Colors.red.withOpacity(0.2) : const Color(0xFF1E1E1E),
+      borderRadius: BorderRadius.circular(20),
+      elevation: 4,
+      shadowColor: Colors.black54,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: isAlert ? const BorderSide(color: Colors.red, width: 2) : BorderSide.none,
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isAlert ? Colors.red : color.withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: isAlert ? Colors.white : color, size: 32),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              label,
+              style: TextStyle(
+                color: isAlert ? Colors.redAccent : Colors.white70, 
+                fontSize: 14, 
+                fontWeight: FontWeight.bold
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

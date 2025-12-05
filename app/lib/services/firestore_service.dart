@@ -277,7 +277,12 @@ class FirestoreService {
     return _firestore.collection('notices')
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((s) => s.docs.map((d) => Notice.fromMap(d.data(), d.id)).toList());
+        .map((s) {
+          final now = DateTime.now();
+          return s.docs.map((d) => Notice.fromMap(d.data(), d.id))
+            .where((n) => n.expiresAt == null || n.expiresAt!.isAfter(now))
+            .toList();
+        });
   }
 
   Future<void> addNotice(Notice notice) async {
@@ -348,5 +353,17 @@ class FirestoreService {
     });
 
     await batch.commit();
+  }
+
+  Future<void> updateUser(AppUser user) async {
+    await _usersRef.doc(user.uid).update(user.toMap());
+  }
+
+  Stream<List<Map<String, dynamic>>> getActiveSOS() {
+    return _sosRef
+        .where('status', isEqualTo: 'active')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map((d) => {'id': d.id, ...d.data()}).toList());
   }
 }

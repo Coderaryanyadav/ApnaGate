@@ -92,7 +92,47 @@ exports.sendNoticeNotification = functions.firestore
     });
 
 // ============================================
-// 📝 HOW IT WORKS (When Deployed)
+// � FUNCTION 3: SOS Alert Broadcast
+// ============================================
+// Triggers when an SOS is created
+// Notifies all Guards & Admins immediately
+//
+exports.sendSOSNotification = functions.firestore
+    .document("sosAlerts/{alertId}")
+    .onCreate(async (snap, context) => {
+        const alert = snap.data();
+
+        // Strategy: Send to 'security_alert' topic 
+        // (Ensure Guards/Admins subscribe to this topic in the app)
+        // OR Loop through users (Better for specific targeting if topics unreliable)
+
+        const payload = {
+            topic: "security_alerts",
+            data: {
+                type: "sos_alert",
+                alertId: context.params.alertId,
+                click_action: "FLUTTER_NOTIFICATION_CLICK",
+            },
+            notification: {
+                title: "🚨 SOS EMERGENCY ALERT 🚨",
+                body: `Emergency at Flat ${alert.flatNumber}. CHECK IMMEDIATELY.`,
+            },
+            android: {
+                priority: "high",
+                notification: {
+                    channelId: "sos_channel",
+                    priority: "max",
+                    visibility: "public",
+                    sound: "siren", // Optional: Custom sound
+                },
+            },
+        };
+
+        return admin.messaging().send(payload);
+    });
+
+// ============================================
+// �📝 HOW IT WORKS (When Deployed)
 // ============================================
 //
 // 1. Guard adds visitor → sendVisitorNotification triggers
@@ -102,6 +142,9 @@ exports.sendNoticeNotification = functions.firestore
 // 2. Admin posts notice → sendNoticeNotification triggers
 //    → All residents get push notification
 //    → Residents see new notice in Notice Board
+//
+// 3. SOS Triggered → sendSOSNotification triggers
+//    → Guards & Admins get LOUD alarm notification
 //
 // ============================================
 // 🔒 SECURITY NOTES

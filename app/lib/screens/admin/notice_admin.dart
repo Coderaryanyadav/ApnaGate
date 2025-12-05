@@ -68,6 +68,7 @@ class NoticeAdminScreen extends ConsumerWidget {
     final titleController = TextEditingController();
     final descController = TextEditingController();
     String type = 'info';
+    DateTime? expiryDate;
 
     showDialog(
       context: context,
@@ -87,10 +88,53 @@ class NoticeAdminScreen extends ConsumerWidget {
                 onChanged: (v) => setState(() => type = v!),
                 decoration: const InputDecoration(labelText: 'Type'),
               ),
+              const SizedBox(height: 16),
+              // Expiry Date Picker
+              InkWell(
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now().add(const Duration(days: 1)),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (date != null) {
+                    setState(() => expiryDate = date);
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white24),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.timer_off),
+                      const SizedBox(width: 8),
+                      Text(
+                        expiryDate == null 
+                          ? 'Set Expiry (Optional)' 
+                          : 'Expires: ${expiryDate!.day}/${expiryDate!.month}/${expiryDate!.year}',
+                        style: TextStyle(color: expiryDate == null ? Colors.white54 : Colors.white),
+                      ),
+                      const Spacer(),
+                      if (expiryDate != null)
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          onPressed: () => setState(() => expiryDate = null),
+                        )
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(context), 
+              child: const Text('Cancel')
+            ),
             ElevatedButton(
               onPressed: () async {
                 if (titleController.text.isEmpty) return;
@@ -101,6 +145,7 @@ class NoticeAdminScreen extends ConsumerWidget {
                   description: descController.text,
                   createdAt: DateTime.now(),
                   type: type,
+                  expiresAt: expiryDate,
                 ));
 
                 if (context.mounted) Navigator.pop(context);

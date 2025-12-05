@@ -6,8 +6,16 @@ class Notice {
   final String description;
   final DateTime createdAt;
   final String type; // 'info', 'alert', 'event'
+  final DateTime? expiresAt;
 
-  Notice({required this.id, required this.title, required this.description, required this.createdAt, required this.type});
+  Notice({
+    required this.id, 
+    required this.title, 
+    required this.description, 
+    required this.createdAt, 
+    required this.type,
+    this.expiresAt,
+  });
 
   factory Notice.fromMap(Map<String, dynamic> map, String id) {
     return Notice(
@@ -16,6 +24,7 @@ class Notice {
       description: map['description'] ?? '',
       createdAt: (map['createdAt'] as Timestamp).toDate(),
       type: map['type'] ?? 'info',
+      expiresAt: map['expiresAt'] != null ? (map['expiresAt'] as Timestamp).toDate() : null,
     );
   }
 
@@ -25,6 +34,7 @@ class Notice {
       'description': description,
       'createdAt': Timestamp.fromDate(createdAt),
       'type': type,
+      if (expiresAt != null) 'expiresAt': Timestamp.fromDate(expiresAt!),
     };
   }
 }
