@@ -1,0 +1,242 @@
+{
+    "users": [
+        {
+            "uid": "REPLACE_WITH_FIREBASE_AUTH_UID_1",
+            "name": "Admin User",
+            "phone": "+919876543210",
+            "flatNumber": null,
+            "wing": null,
+            "role": "admin",
+            "userType": null,
+            "ownerId": null,
+            "familyMembers": null,
+            "createdAt": {
+                "_seconds": 1733394000,
+                "_nanoseconds": 0
+            }
+        },
+        {
+            "uid": "REPLACE_WITH_FIREBASE_AUTH_UID_2",
+            "name": "Ramesh Sharma",
+            "phone": "+919876543211",
+            "flatNumber": null,
+            "wing": null,
+            "role": "guard",
+            "userType": null,
+            "ownerId": null,
+            "familyMembers": null,
+            "createdAt": {
+                "_seconds": 1733394000,
+                "_nanoseconds": 0
+            }
+        },
+        {
+            "uid": "REPLACE_WITH_FIREBASE_AUTH_UID_3",
+            "name": "Suresh Kumar",
+            "phone": "+919876543212",
+            "flatNumber": null,
+            "wing": null,
+            "role": "guard",
+            "userType": null,
+            "ownerId": null,
+            "familyMembers": null,
+            "createdAt": {
+                "_seconds": 1733394000,
+                "_nanoseconds": 0
+            }
+        },
+        {
+            "uid": "REPLACE_WITH_FIREBASE_AUTH_UID_4",
+            "name": "Rajesh Kumar",
+            "phone": "+919876543220",
+            "flatNumber": "101",
+            "wing": "A",
+            "role": "resident",
+            "userType": "owner",
+            "ownerId": null,
+            "familyMembers": [
+                "Rajesh Kumar",
+                "Priya Kumar",
+                "Aarav Kumar"
+            ],
+            "createdAt": {
+                "_seconds": 1733394000,
+                "_nanoseconds": 0
+            }
+        },
+        {
+            "uid": "REPLACE_WITH_FIREBASE_AUTH_UID_5",
+            "name": "Amit Shah",
+            "phone": "+919876543221",
+            "flatNumber": "102",
+            "wing": "A",
+            "role": "resident",
+            "userType": "owner",
+            "ownerId": null,
+            "familyMembers": [
+                "Amit Shah",
+                "Neha Shah"
+            ],
+            "createdAt": {
+                "_seconds": 1733394000,
+                "_nanoseconds": 0
+            }
+        },
+        {
+            "uid": "REPLACE_WITH_FIREBASE_AUTH_UID_6",
+            "name": "Vikram Singh",
+            "phone": "+919876543222",
+            "flatNumber": "103",
+            "wing": "A",
+            "role": "resident",
+            "userType": "renter",
+            "ownerId": null,
+            "familyMembers": [
+                "Vikram Singh",
+                "Anjali Singh",
+                "Rohan Singh"
+            ],
+            "createdAt": {
+                "_seconds": 1733394000,
+                "_nanoseconds": 0
+            }
+        },
+        {
+            "uid": "REPLACE_WITH_FIREBASE_AUTH_UID_7",
+            "name": "Suresh Patel",
+            "phone": "+919876543223",
+            "flatNumber": "104",
+            "wing": "A",
+            "role": "resident",
+            "userType": "owner",
+            "ownerId": null,
+            "familyMembers": [
+                "Suresh Patel",
+                "Kavita Patel",
+                "Diya Patel",
+                "Arjun Patel"
+            ],
+            "createdAt": {
+                "_seconds": 1733394000,
+                "_nanoseconds": 0
+            }
+        },
+        {
+            "uid": "REPLACE_WITH_FIREBASE_AUTH_UID_8",
+            "name": "Manoj Verma",
+            "phone": "+919876543224",
+            "flatNumber": "201",
+            "wing": "A",
+            "role": "resident",
+            "userType": "owner",
+            "ownerId": null,
+            "familyMembers": [
+                "Manoj Verma",
+                "Sita Verma",
+                "Rahul Verma"
+            ],
+            "createdAt": {
+                "_seconds": 1733394000,
+                "_nanoseconds": 0
+            }
+        },
+        {
+            "uid": "REPLACE_WITH_FIREBASE_AUTH_UID_9",
+            "name": "Deepak Joshi",
+            "phone": "+919876543225",
+            "flatNumber": "301",
+            "wing": "B",
+            "role": "resident",
+            "userType": "owner",
+            "ownerId": null,
+            "familyMembers": [
+                "Deepak Joshi",
+                "Meera Joshi"
+            ],
+            "createdAt": {
+                "_seconds": 1733394000,
+                "_nanoseconds": 0
+            }
+        },
+        {
+            "uid": "REPLACE_WITH_FIREBASE_AUTH_UID_10",
+            "name": "Ramesh Gupta",
+            "phone": "+919876543226",
+            "flatNumber": "1201",
+            "wing": "B",
+            "role": "resident",
+            "userType": "owner",
+            "ownerId": null,
+            "familyMembers": [
+                "Ramesh Gupta",
+                "Sunita Gupta",
+                "Karan Gupta",
+                "Simran Gupta",
+                "Nisha Gupta"
+            ],
+            "createdAt": {
+                "_seconds": 1733394000,
+                "_nanoseconds": 0
+            }
+        }
+    ],
+    "auth_users": [
+        {
+            "email": "admin@crescentgate.com",
+            "password": "admin123",
+            "displayName": "Admin User"
+        },
+        {
+            "email": "guard1@crescentgate.com",
+            "password": "guard123",
+            "displayName": "Ramesh Sharma"
+        },
+        {
+            "email": "guard2@crescentgate.com",
+            "password": "guard123",
+            "displayName": "Suresh Kumar"
+        },
+        {
+            "email": "a101@test.com",
+            "password": "test123",
+            "displayName": "Rajesh Kumar"
+        },
+        {
+            "email": "a102@test.com",
+            "password": "test123",
+            "displayName": "Amit Shah"
+        },
+        {
+            "email": "a103@test.com",
+            "password": "test123",
+            "displayName": "Vikram Singh"
+        },
+        {
+            "email": "a104@test.com",
+            "password": "test123",
+            "displayName": "Suresh Patel"
+        },
+        {
+            "email": "a201@test.com",
+            "password": "test123",
+            "displayName": "Manoj Verma"
+        },
+        {
+            "email": "b301@test.com",
+            "password": "test123",
+            "displayName": "Deepak Joshi"
+        },
+        {
+            "email": "b1201@test.com",
+            "password": "test123",
+            "displayName": "Ramesh Gupta"
+        }
+    ],
+    "instructions": {
+        "step1": "Create all users in Firebase Authentication using the 'auth_users' array above",
+        "step2": "Copy each user's UID from Firebase Auth",
+        "step3": "Replace 'REPLACE_WITH_FIREBASE_AUTH_UID_X' in the 'users' array with actual UIDs",
+        "step4": "Import the updated 'users' array to Firestore 'users' collection",
+        "step5": "Each document ID should be the user's UID"
+    }
+}

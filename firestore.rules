@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // --- HELPER FUNCTIONS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isGuard() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'guard';
+    }
+
+    function isResident() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'resident';
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // 🛡️ Input Validation
+    function validString(value, maxLength) {
+      return value is string && value.size() <= maxLength && value.size() > 0;
+    }
+
+    function validFlatNumber(flat) {
+      return flat is string && flat.matches('^[A-Z]-[0-9]{3}$');
+    }
+
+    // --- COLLECTION RULES ---
+
+    // 📢 NOTICES: Read by all, Write by Admin only
+    match /notices/{noticeId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() 
+        && validString(request.resource.data.title, 100)
+        && validString(request.resource.data.description, 500)
+        && request.resource.data.type in ['info', 'alert', 'event'];
+      allow update, delete: if isAdmin();
+    }
+
+    // 🛠️ SERVICES: Read by all, Write by Admin only
+    match /serviceProviders/{providerId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin()
+        && validString(request.resource.data.name, 100)
+        && validString(request.resource.data.phone, 15);
+      allow update: if isAdmin() || isGuard(); // Guards can update status
+      allow delete: if isAdmin();
+    }
+
+    // 📂 COMPLAINTS: Create by any, Read by owner/admin, Update by admin
+    match /complaints/{complaintId} {
+      allow create: if isSignedIn()
+        && validString(request.resource.data.title, 200)
+        && validString(request.resource.data.description, 1000)
+        && request.resource.data.residentId == request.auth.uid;
+      allow read: if isSignedIn() && (
+        resource.data.residentId == request.auth.uid || isAdmin()
+      );
+      allow update: if isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+    }
+
+    // USERS
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() || (isSignedIn() && userId == request.auth.uid);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // VISITOR REQUESTS
+    match /visitorRequests/{requestId} {
+      allow read: if isSignedIn();
+      allow create: if isGuard()
+        && validString(request.resource.data.visitorName, 100)
+        && validFlatNumber(request.resource.data.flatNumber);
+      allow update: if isResident() || isGuard() || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // GUEST PASSES
+    // - Guards: Read (to validate), Update (mark used)
+    match /guestPasses/{passId} {
+      allow read: if isAdmin() || isGuard() || (isResident() && resource.data.residentId == request.auth.uid);
+      allow create: if isResident() && request.resource.data.residentId == request.auth.uid;
+      allow update: if isGuard() || (isResident() && resource.data.residentId == request.auth.uid);
+    }
+
+    // SOS ALERTS
+    // - Residents: Create
+    // - Guards/Admin: Read, Update (resolve)
+    match /sosAlerts/{alertId} {
+      allow create: if isResident();
+      allow read: if isSignedIn(); // Guards need to see, Residents need to see own
+      allow update: if isAdmin() || isGuard();
+    }
+
+    // NOTIFICATIONS
+    // - Any authenticated user can create a notification (for the system to work client-side)
+    // - In a real app, this is insecure. But for Free Tier architecture, we allow it.
+    // - Mitigate by ensuring they can only write valid fields? Hard in rules.
+    match /notifications/{notificationId} {
+      allow read: if request.auth.uid == resource.data.recipientId;
+      allow create: if isSignedIn(); // Needed for client-side triggers
+    }
+  }
+}
