@@ -97,53 +97,5 @@ class CrescentGateApp extends ConsumerWidget {
   }
 }
 
-// 📦 Separated Auth Logic into Wrapper
-class AuthWrapper extends ConsumerWidget {
-  const AuthWrapper({super.key});
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authStateProvider);
 
-    return authState.when(
-      data: (user) {
-        if (user == null) {
-          return const LoginScreen();
-        }
-
-        // Initialize Notifications in background
-        Future.microtask(() {
-          ref.read(notificationServiceProvider).initialize(user.uid);
-        });
-
-        // Fetch user role
-        return FutureBuilder<AppUser?>(
-          future: ref.watch(firestoreServiceProvider).getUser(user.uid),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(body: Center(child: CircularProgressIndicator()));
-            }
-            
-            final appUser = snapshot.data;
-            if (appUser == null) {
-              return const LoginScreen();
-            }
-
-            switch (appUser.role) {
-              case 'guard':
-                return const GuardHome();
-              case 'admin':
-                return const AdminDashboard();
-              case 'resident':
-              default:
-                return const ResidentHome();
-            }
-          },
-        );
-      },
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (e, trace) => Scaffold(body: Center(child: Text('Error: $e'))),
-    );
-  }
-}
-}

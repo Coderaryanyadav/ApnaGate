@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../services/auth_service.dart';
+import '../auth_wrapper.dart'; // Import the new wrapper
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -35,8 +35,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
     // Navigate after 3 seconds
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) {
-        // Use your AuthWrapper or determine route logic here
-        // Usually we replace this widget with the AuthWrapper
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
             pageBuilder: (_, __, ___) => const AuthWrapper(),

@@ -10,6 +10,7 @@ import 'guest_pass_screen.dart';
 import 'sos_screen.dart';
 import 'notice_list.dart';
 import 'complaint_list.dart';
+import '../../models/user.dart';
 import 'service_directory.dart';
 
 class ResidentHome extends ConsumerStatefulWidget {
