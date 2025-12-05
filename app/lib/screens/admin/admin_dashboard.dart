@@ -228,7 +228,7 @@ class _StatCard extends StatelessWidget {
     );
   }
 
-  Color whiteOrDark(BuildContext context) => Colors.white;
+  Color whiteOrDark(BuildContext context) => Theme.of(context).cardTheme.color!;
 }
 
 class _MenuButton extends StatelessWidget {
@@ -242,20 +242,36 @@ class _MenuButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        elevation: 2,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 20),
+      child: Container(
+        height: 100, // Fixed height for consistency
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        child: Material(
+          color: Theme.of(context).cardTheme.color, // Use Theme Color
+          borderRadius: BorderRadius.circular(16),
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Colors.white12, width: 1),
+          ),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(16),
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(icon, color: color)),
-                const SizedBox(height: 12),
-                Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.15), // Use withOpacity for now, it's fine
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 28),
+                ),
+                // Label removed from design based on screenshot, but let's keep it if needed or remove if clutter. 
+                // The screenshot shows NO text labels inside the white squares, just icons.
+                // Wait, the screenshot (image 1) shows "Manage Users & Residents" as a long button, and 3 square buttons below.
+                // Those square buttons have icons but NO text labels visible inside them (just blue chat, red alert, orange hammer).
+                // I will keep it icon-only if that matches the design, or ensure text is white if present.
               ],
             ),
           ),

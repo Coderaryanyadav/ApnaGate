@@ -57,7 +57,7 @@ class _GuestPassScreenState extends ConsumerState<GuestPassScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).cardTheme.color,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
@@ -69,11 +69,18 @@ class _GuestPassScreenState extends ConsumerState<GuestPassScreen> {
               ),
               child: Column(
                 children: [
-                   QrImageView(
-                    data: _currentPass!.token,
-                    version: QrVersions.auto,
-                    size: 250,
-                  ),
+                   Container(
+                     padding: const EdgeInsets.all(12),
+                     decoration: BoxDecoration(
+                       color: Colors.white,
+                       borderRadius: BorderRadius.circular(8),
+                     ),
+                     child: QrImageView(
+                      data: _currentPass!.token,
+                      version: QrVersions.auto,
+                      size: 250,
+                    ),
+                   ),
                   const SizedBox(height: 16),
                   const Text(
                     'Entry Pass',

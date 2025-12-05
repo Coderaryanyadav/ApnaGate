@@ -21,91 +21,76 @@ class CrescentGateApp extends ConsumerWidget {
     return MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Crescent Gate',
+      debugShowCheckedModeBanner: false, // Clean look
       
-      // 🌞 LIGHT THEME
-      theme: ThemeData(
-        brightness: Brightness.light,
-        primarySwatch: Colors.indigo,
-        scaffoldBackgroundColor: Colors.grey[50],
-        useMaterial3: true,
-        
-        // Text Themes
-        textTheme: const TextTheme(
-          bodyLarge: TextStyle(color: Colors.black87),
-          bodyMedium: TextStyle(color: Colors.black87),
-          bodySmall: TextStyle(color: Colors.black54),
-        ),
-        
-        // App Bar
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          elevation: 0,
-        ),
-        
-        // Cards
-        cardTheme: CardThemeData(
-          elevation: 2,
-          color: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-        
-        // Input
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
-          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        ),
-      ),
-      
-      // 🌙 DARK THEME
-      darkTheme: ThemeData(
+      // 🚫 DISABLE LIGHT THEME COMPLETELY
+      theme: ThemeData.dark().copyWith(
         brightness: Brightness.dark,
-        primarySwatch: Colors.indigo,
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        useMaterial3: true,
+        primaryColor: Colors.indigo,
+        scaffoldBackgroundColor: const Color(0xFF000000), // PITCH BLACK for max contrast
         
-        // Text Themes - HIGH CONTRAST
+        // Text Themes - FORCE WHITE
         textTheme: const TextTheme(
-          bodyLarge: TextStyle(color: Colors.white),
-          bodyMedium: TextStyle(color: Colors.white70),
-          bodySmall: TextStyle(color: Colors.white60),
-          titleLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          titleMedium: TextStyle(color: Colors.white),
-          labelLarge: TextStyle(color: Colors.white),
+          bodyLarge: TextStyle(color: Colors.white, fontSize: 16),
+          bodyMedium: TextStyle(color: Colors.white, fontSize: 14),
+          bodySmall: TextStyle(color: Colors.white70, fontSize: 12),
+          titleLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+          titleMedium: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
         ),
         
         // App Bar
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1E1E1E),
+          backgroundColor: Color(0xFF121212), // Slightly lighter than black
           foregroundColor: Colors.white,
           elevation: 0,
+          titleTextStyle: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+          iconTheme: IconThemeData(color: Colors.white),
         ),
         
         // Cards
         cardTheme: CardThemeData(
+          color: const Color(0xFF1E1E1E), // Standard Dark Grey Card
           elevation: 4,
-          color: const Color(0xFF1E1E1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Colors.white12, width: 1), // Subtle border for definition
+          ),
         ),
         
-        // Input
+        // Inputs
         inputDecorationTheme: InputDecorationTheme(
-          border: const OutlineInputBorder(),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           filled: true,
           fillColor: const Color(0xFF2C2C2C),
           labelStyle: const TextStyle(color: Colors.white70),
           hintStyle: const TextStyle(color: Colors.white38),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.white24),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.white24),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.indigoAccent, width: 2),
+          ),
+          prefixIconColor: Colors.white70,
+          suffixIconColor: Colors.white70,
         ),
         
-        // Icons
-        iconTheme: const IconThemeData(color: Colors.white70),
         
-        // Divider
-        dividerColor: Colors.white12,
+        // Bottom Sheet
+        bottomSheetTheme: const BottomSheetThemeData(
+          backgroundColor: Color(0xFF1E1E1E),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+        ),
       ),
       
-      themeMode: ThemeMode.system, // Auto-switch based on system
+      // FORCE DARK MODE ALWAYS
+      themeMode: ThemeMode.dark, 
       home: authState.when(
         data: (user) {
           if (user == null) {

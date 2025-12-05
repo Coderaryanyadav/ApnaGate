@@ -81,7 +81,7 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
     final logsStream = ref.watch(firestoreServiceProvider).getTodayVisitorLogs();
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      // backgroundColor: Use default dark background
       body: RefreshIndicator(
         onRefresh: () async {
           // Refresh stream by invalidating provider
@@ -91,18 +91,17 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
         child: CustomScrollView(
           slivers: [
             SliverAppBar(
-              title: const Text('Today\'s Log', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-              backgroundColor: Colors.white,
+              title: const Text('📅 Today\'s Log'),
+              // Default dark theme
               elevation: 0,
               floating: true,
               pinned: true,
-              iconTheme: const IconThemeData(color: Colors.black),
               actions: [
                 IconButton(
                   onPressed: () => _showFilterDialog(),
                   icon: Icon(
                     Icons.filter_list,
-                    color: _statusFilter != 'all' ? Colors.indigo : Colors.grey,
+                    color: _statusFilter != 'all' ? Colors.indigoAccent : Colors.white70,
                   ),
                 ),
               ],
@@ -117,11 +116,7 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
                     hintText: 'Search by visitor name...',
                     prefixIcon: const Icon(Icons.search),
                     filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
+                    // Default theme fill color
                   ),
                   onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
                 ),
@@ -138,12 +133,12 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
                       (context, index) => Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         child: Shimmer.fromColors(
-                          baseColor: Colors.grey[300]!,
-                          highlightColor: Colors.grey[100]!,
+                          baseColor: Colors.grey[800]!,
+                          highlightColor: Colors.grey[700]!,
                           child: Container(
                             height: 120,
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: Colors.black,
                               borderRadius: BorderRadius.circular(16),
                             ),
                           ),
@@ -156,7 +151,7 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
                 
                 if (snapshot.hasError) {
                   return SliverFillRemaining(
-                    child: Center(child: Text('Error: ${snapshot.error}')),
+                    child: Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red))),
                   );
                 }
 
@@ -175,7 +170,7 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.search_off, size: 60, color: Colors.grey[300]),
+                          Icon(Icons.search_off, size: 60, color: Colors.grey[700]),
                           const SizedBox(height: 16),
                           Text(
                             _searchQuery.isEmpty && _statusFilter == 'all' ? 'No visitors yet today' : 'No results found',
@@ -187,21 +182,21 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
                   );
                 }
 
-              return SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final log = logs[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: VisitorCard(request: log),
-                    );
-                  },
-                  childCount: logs.length,
-                ),
-              );
-            },
-          ),
-        ],
+                return SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final log = logs[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0, left: 16, right: 16),
+                        child: VisitorCard(request: log),
+                      );
+                    },
+                    childCount: logs.length,
+                  ),
+                );
+              },
+            ),
+          ],
         ),
       ),
     );
