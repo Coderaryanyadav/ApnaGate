@@ -23,23 +23,33 @@ class AdminDashboard extends ConsumerStatefulWidget {
 class _AdminDashboardState extends ConsumerState<AdminDashboard> {
   final Set<String> _handledAlerts = {};
   bool _isAlertShowing = false;
-  Timer? _refreshTimer;
   static bool _hasSetupOneSignal = false;
 
   @override
   void initState() {
     super.initState();
     
+    // 🔒 Security: Role Check
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = ref.read(authServiceProvider).currentUser;
+      // Fetch fresh profile to be sure? Or trust Auth Object.
+      // Ideally check profile. But AuthUser likely has role.
+      if (user == null || user.role != 'admin') {
+        debugPrint('⛔ Access Denied: User ${user?.id} is not admin.');
+        if (mounted) {
+           Navigator.of(context).pushReplacementNamed(AppRoutes.login); // Or home
+           // If logged in but not admin, maybe resident home?
+           // Assuming 'AppRoutes.home' handles redirection based on role? 
+           // If not, clear stack to Login.
+        }
+      }
+    });
+    
     // OneSignal Setup
     if (!_hasSetupOneSignal) {
       _hasSetupOneSignal = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _setupOneSignal());
     }
-
-    // Auto-refresh every 10 seconds as requested
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      if (mounted) setState(() {});
-    });
   }
 
   void _setupOneSignal() {
@@ -52,9 +62,14 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
-    _refreshTimer = null; // Clear reference
     super.dispose();
+  }
+  
+  Future<void> _onRefresh() async {
+    // Trigger rebuild to re-run FutureBuilder
+    if (mounted) setState(() {});
+    // Min delay to show spinner
+    await Future.delayed(const Duration(milliseconds: 500));
   }
 
   @override
@@ -82,7 +97,11 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
 
         return Scaffold(
           backgroundColor: const Color(0xFF0A0A0A),
-          body: CustomScrollView(
+          body: RefreshIndicator(
+            onRefresh: _onRefresh,
+            color: Colors.white,
+            backgroundColor: Colors.indigo,
+            child: CustomScrollView(
             slivers: [
               // 1. Modern Gradient App Bar
               SliverAppBar(

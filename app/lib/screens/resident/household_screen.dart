@@ -227,51 +227,116 @@ class _HouseholdScreenState extends ConsumerState<HouseholdScreen> {
           final flatNumber = currentUser.flatNumber ?? '';
 
           if (wing.isEmpty || flatNumber.isEmpty) {
-            return const Center(
-              child: Text(
-                'Unable to load flat information',
-                style: TextStyle(color: Colors.white),
-              ),
-            );
+            return const Center(child: Text('Unable to load flat information', style: TextStyle(color: Colors.white)));
           }
 
+          // 1. Stream Registry (Invites/Pending)
           return StreamBuilder<List<Map<String, dynamic>>>(
             stream: ref.watch(firestoreServiceProvider).getHouseholdMembersByFlat(wing, flatNumber),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const LoadingList(message: 'Loading household members...');
-              }
+            builder: (context, registrySnapshot) {
               
-              // Create modifiable list and inject Current User
-              final members = List<Map<String, dynamic>>.from(snapshot.data ?? []);
-              
-              final isUserInList = members.any((m) => m['id'] == currentUser.id); // Assuming registry items have 'id' matching user if registered, or linked
-              // Actually registry items have their own UUID. Linked User ID IS in 'id' if registered? 
-              // Wait, registry 'id' is row ID. 'linked_user_id' might be the user ID? Or Profile ID?
-              // The logic below assumes generic display.
-              // Let's safe-check by Name or Phone if ID mismatch.
-              // But simplest is just Prepend "You".
-              
-              if (!isUserInList) {
-                 // Check if any member has same phone?
-                 final phoneMatch = members.indexWhere((m) => m['phone'] == currentUser.phone);
-                 if (phoneMatch != -1) {
-                    // Update name to include (You)?
-                    members[phoneMatch]['name'] += ' (You)';
-                    members[phoneMatch]['is_current_user'] = true;
-                 } else {
-                    // Prepend
-                    members.insert(0, {
-                      'id': currentUser.id,
-                      'name': '${currentUser.name} (You)',
-                      'role': 'Owner',
-                      'phone': currentUser.phone,
-                      'is_registered': true,
-                      'photo_url': currentUser.photoUrl,
-                      'is_current_user': true, 
+              // 2. Stream Profiles (Active Users)
+              return StreamBuilder<List<AppUser>>(
+                  stream: ref.watch(firestoreServiceProvider).getResidentsStream(wing, flatNumber),
+                  builder: (context, profilesSnapshot) {
+                    if (registrySnapshot.connectionState == ConnectionState.waiting || 
+                        profilesSnapshot.connectionState == ConnectionState.waiting) {
+                      return const LoadingList(message: 'Loading members...');
+                    }
+
+                    final registryList = registrySnapshot.data ?? [];
+                    final profileList = profilesSnapshot.data ?? [];
+
+                    // --- MERGE LOGIC ---
+                    final Map<String, Map<String, dynamic>> mergedMap = {};
+
+                    // A. Add Profiles (Source of Truth for Active Users)
+                    for (var profile in profileList) {
+                      // Use Phone or ID as key? Profile ID is unique.
+                      mergedMap[profile.id] = {
+                        'id': profile.id, // Profile ID implies deletion removes Profile? No, usually household_registry ID. 
+                        // Logic: If user is in Profile, they are a member. Removing them means removing from Group? 
+                        // If they are just a Profile, we can't 'delete' the profile easily.
+                        // Ideally, we treat them as 'Active'.
+                        'name': profile.name,
+                        'phone': profile.phone,
+                        'role': profile.role == 'admin' ? 'Co-Owner' : 'Family',
+                        'photo_url': profile.photoUrl,
+                        'is_registered': true,
+                        'is_profile': true, // Mark as having a profile
+                        'profile_id': profile.id,
+                      };
+                    }
+
+                    // B. Add/Update from Registry (Source for Roles/Pending)
+                    for (var reg in registryList) {
+                      // Try to match with existing Profile by Phone
+                      final phone = reg['phone']?.toString().trim();
+                      // Find if this phone exists in mergedMap
+                      String? existingId;
+                      for (var key in mergedMap.keys) {
+                        if (mergedMap[key]?['phone'] == phone) {
+                          existingId = key;
+                          break;
+                        }
+                      }
+                      
+                      final linkedId = reg['linked_user_id'];
+                      if (linkedId != null && mergedMap.containsKey(linkedId)) {
+                         existingId = linkedId;
+                      }
+
+                      if (existingId != null) {
+                        // MERGE: Update Role from Registry (it's more specific: Tenant/Family)
+                        mergedMap[existingId]!['role'] = reg['role'];
+                        mergedMap[existingId]!['registry_id'] = reg['id']; // Store registry ID for deletion
+                      } else {
+                        // Add New (Pending Invite)
+                        mergedMap[reg['id']] = {
+                          'id': reg['id'],
+                          'name': reg['name'],
+                          'phone': reg['phone'],
+                          'role': reg['role'],
+                          'photo_url': reg['photo_url'],
+                          'is_registered': false, // Not in profile list? Or check linked_user_id
+                          'registry_id': reg['id'],
+                          // If linked_user_id is set but not found in Profiles stream (maybe delay?), treat as pending?
+                          // Or maybe profile fetch failed?
+                        };
+                      }
+                    }
+
+                    // C. Convert to List & Sort
+                    final members = mergedMap.values.toList();
+                    
+                    // D. Handle Current User Display
+                    final isUserInList = members.any((m) => m['phone'] == currentUser.phone || m['id'] == currentUser.id);
+                    if (!isUserInList) {
+                       members.insert(0, {
+                          'id': currentUser.id,
+                          'name': '${currentUser.name} (You)',
+                          'phone': currentUser.phone,
+                          'role': 'Owner (You)',
+                          'photo_url': currentUser.photoUrl,
+                          'is_registered': true,
+                          'is_current_user': true,
+                       });
+                    } else {
+                       // Mark current user
+                       for (var m in members) {
+                         if (m['phone'] == currentUser.phone || m['id'] == currentUser.id) {
+                            m['name'] = '${m['name']} (You)';
+                            m['is_current_user'] = true;
+                            if (m['role'] == null) m['role'] = 'Owner';
+                         }
+                       }
+                    }
+
+                    members.sort((a, b) {
+                       if (a['is_current_user'] == true) return -1;
+                       if (b['is_current_user'] == true) return 1;
+                       return 0;
                     });
-                 }
-              }
 
               return CustomScrollView(
                 slivers: [
@@ -339,8 +404,8 @@ class _HouseholdScreenState extends ConsumerState<HouseholdScreen> {
                              backgroundColor: isRegistered ? Colors.green.withValues(alpha: 0.2) : Colors.orange.withValues(alpha: 0.2),
                              backgroundImage: member['photo_url'] != null ? NetworkImage(member['photo_url']) : null,
                              child: member['photo_url'] == null ? Icon(
-                               member['role'] == 'family' || member['role'] == 'Owner' ? Icons.favorite : Icons.person,
-                               color: member['role'] == 'family' || member['role'] == 'Owner' ? Colors.pinkAccent : Colors.blueAccent,
+                               member['role'] == 'Family' || member['role'] == 'Owner' ? Icons.favorite : Icons.person,
+                               color: member['role'] == 'Family' || member['role'] == 'Owner' ? Colors.pinkAccent : Colors.blueAccent,
                              ) : null,
                           ),
                           title: Text(member['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -348,42 +413,46 @@ class _HouseholdScreenState extends ConsumerState<HouseholdScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const SizedBox(height: 4),
-                              Text(member['phone'], style: const TextStyle(color: Colors.grey)),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: isRegistered ? Colors.green.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  isRegistered ? 'Active' : 'Pending Invite',
-                                  style: TextStyle(
-                                    fontSize: 10, 
-                                    color: isRegistered ? Colors.greenAccent : Colors.orangeAccent
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          trailing: isCurrentUser ? null : IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                            onPressed: () => _confirmDelete(member['id']),
-                          ),
-                        ),
-                      );
-                    },
-                    childCount: members.length,
-                  ),
-                ),
+                               Text(member['phone'] ?? '', style: const TextStyle(color: Colors.grey)),
+                               const SizedBox(height: 4),
+                               Container(
+                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                 decoration: BoxDecoration(
+                                   color: isRegistered ? Colors.green.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
+                                   borderRadius: BorderRadius.circular(4),
+                                 ),
+                                 child: Text(
+                                   isRegistered ? 'Active' : 'Pending Invite',
+                                   style: TextStyle(
+                                     fontSize: 10, 
+                                     color: isRegistered ? Colors.greenAccent : Colors.orangeAccent
+                                   ),
+                                 ),
+                               ),
+                             ],
+                           ),
+                           trailing: isCurrentUser ? null : IconButton(
+                             // If it's a Profile WITHOUT Registry ID, we can't "delete" it from registry. 
+                             // We might need to 'Add to registry then delete'? Or just Hide?
+                             // Delete creates a disconnect.
+                             icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                             onPressed: () => _confirmDelete(member['registry_id'] ?? member['profile_id']), 
+                           ),
+                         ),
+                       );
+                     },
+                     childCount: members.length,
+                   ),
+                 ),
             ],
           );
-        },
-      );
-        },
-      ),
-    );
-  }
+        }
+      );  
+    });
+   }
+  ),
+ );
+}
 
   Future<void> _confirmDelete(String id) async {
     final confirmed = await ConfirmationDialog.confirmDelete(

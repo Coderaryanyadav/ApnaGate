@@ -616,6 +616,15 @@ class FirestoreService {
         .map((event) => event);
   }
 
+  Stream<List<AppUser>> getResidentsStream(String wing, String flatNumber) {
+    return _client
+        .from('profiles')
+        .stream(primaryKey: ['id'])
+        .eq('wing', wing)
+        .eq('flat_number', flatNumber)
+        .map((data) => data.map((e) => AppUser.fromMap(e, e['id'])).toList());
+  }
+
   /// Get household members by flat (wing + flat_number) - for synced view
   Stream<List<Map<String, dynamic>>> getHouseholdMembersByFlat(String wing, String flatNumber) {
     return _client
