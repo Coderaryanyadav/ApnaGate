@@ -371,6 +371,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
               const SliverToBoxAdapter(child: SizedBox(height: 40)),
             ],
           ),
+         ),
         );
       },
     );

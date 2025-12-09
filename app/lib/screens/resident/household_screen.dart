@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
+import '../../models/user.dart'; // Added
 import '../../widgets/empty_state.dart';
 import '../../widgets/loading_widgets.dart';
 import '../../widgets/confirmation_dialog.dart';
