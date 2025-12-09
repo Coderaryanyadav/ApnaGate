@@ -620,9 +620,10 @@ class FirestoreService {
     return _client
         .from('profiles')
         .stream(primaryKey: ['id'])
-        .eq('wing', wing)
-        .eq('flat_number', flatNumber)
-        .map((data) => data.map((e) => AppUser.fromMap(e, e['id'])).toList());
+        .map((data) => data.where((item) => 
+            item['wing'] == wing && 
+            item['flat_number'] == flatNumber
+        ).map((e) => AppUser.fromMap(e, e['id'])).toList());
   }
 
   /// Get household members by flat (wing + flat_number) - for synced view
@@ -798,8 +799,7 @@ class FirestoreService {
     return _client
         .from('staff_attendance_logs')
         .stream(primaryKey: ['id'])
-        .eq('staff_id', staffId)
-        .order('timestamp', ascending: false);
+        .order('timestamp', ascending: false)
+        .map((data) => data.where((log) => log['staff_id'] == staffId).toList());
   }
 }
-
