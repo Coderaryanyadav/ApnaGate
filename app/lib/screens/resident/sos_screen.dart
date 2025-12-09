@@ -59,11 +59,11 @@ class _SosScreenState extends ConsumerState<SosScreen> {
       await ref.read(firestoreServiceProvider).sendSOS(wing: appUser.wing);
 
       // 2. Push Notification
-      await ref.read(notificationServiceProvider).notifyByTag(
-        tagKey: 'role',
-        tagValue: 'guard',
-        title: '🚨 SOS ALERT',
-        message: 'Emergency at ${appUser.wing ?? 'Unknown'}-${appUser.flatNumber ?? '000'}',
+      // 2. Push Notification (Guards + Admins)
+      await ref.read(notificationServiceProvider).notifySOSAlert(
+        wing: appUser.wing ?? 'Unknown',
+        flatNumber: appUser.flatNumber ?? '000',
+        residentName: appUser.name,
       );
       
       if (mounted) {

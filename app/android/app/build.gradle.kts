@@ -45,7 +45,7 @@ android {
 
 // Suppress ALL Java compiler warnings
 tasks.withType<JavaCompile> {
-    options.compilerArgs.addAll(listOf("-nowarn"))
+    options.compilerArgs.addAll(listOf("-Xlint:none", "-nowarn"))
 }
 
 flutter {

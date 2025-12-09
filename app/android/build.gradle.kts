@@ -20,7 +20,7 @@ subprojects {
     
     // Suppress all Java warnings globally
     tasks.withType<JavaCompile> {
-        options.compilerArgs.addAll(listOf("-nowarn"))
+        options.compilerArgs.addAll(listOf("-Xlint:none", "-nowarn"))
     }
 }
 

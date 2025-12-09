@@ -86,11 +86,13 @@ class _ScanPassScreenState extends ConsumerState<ScanPassScreen> with SingleTick
              
              try {
                 final notificationService = ref.read(notificationServiceProvider);
-                await notificationService.notifyUser(
-                  userId: pass.residentId,
+                // Notify ALL residents of the flat (Owners + Family)
+                await notificationService.notifyFlat(
+                  wing: pass.wing ?? '',
+                  flatNumber: pass.flatNumber ?? '',
                   title: 'Guest Arrived',
                   message: 'Guest (${pass.guestCount} ppl) has entered.',
-                  data: {'type': 'guest_arrival', 'pass_id': pass.id},
+                  visitorId: pass.id,
                 );
              } catch (e) {
                 debugPrint('Failed notify: $e');

@@ -30,17 +30,38 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     super.initState();
     
     // 🔒 Security: Role Check
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final user = ref.read(authServiceProvider).currentUser;
-      // Fetch fresh profile to be sure? Or trust Auth Object.
-      // Ideally check profile. But AuthUser likely has role.
-      if (user == null || user.role != 'admin') {
-        debugPrint('⛔ Access Denied: User ${user?.id} is not admin.');
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final authUser = ref.read(authServiceProvider).currentUser;
+      
+      if (authUser == null) {
+        if (mounted) Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+        return;
+      }
+
+      // 🔒 Security: Check Role from Database (More Reliable than auth metadata)
+      // This also handles the case where 'user.role' extension might be missing or empty.
+      final profile = await ref.read(firestoreServiceProvider).getUser(authUser.id);
+      
+      if (profile == null || profile.role != 'admin') {
+        debugPrint('⛔ Access Denied: User ${authUser.id} is not admin. Role: ${profile?.role}');
         if (mounted) {
-           Navigator.of(context).pushReplacementNamed(AppRoutes.login); // Or home
-           // If logged in but not admin, maybe resident home?
-           // Assuming 'AppRoutes.home' handles redirection based on role? 
-           // If not, clear stack to Login.
+           showDialog(
+             context: context,
+             barrierDismissible: false,
+             builder: (ctx) => AlertDialog(
+               title: const Text('Access Denied', style: TextStyle(color: Colors.red)),
+               content: Text('You are logged in as "${profile?.role ?? 'unknown'}"\nID: ${authUser.id}\n\nThis page requires ADMIN access.'),
+               actions: [
+                 TextButton(
+                   onPressed: () {
+                     Navigator.of(ctx).pop();
+                     Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+                   },
+                   child: const Text('Go to Login'),
+                 ),
+               ],
+             ),
+           );
         }
       }
     });
