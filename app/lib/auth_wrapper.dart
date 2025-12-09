@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:onesignal_flutter/onesignal_flutter.dart'; // Added
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'models/user.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/guard/guard_home.dart';
@@ -9,6 +9,11 @@ import 'screens/admin/admin_dashboard.dart';
 import 'services/auth_service.dart';
 import 'services/firestore_service.dart';
 import 'services/onesignal_manager.dart';
+
+// ⚡ Cache user profile to avoid flashing/refetching on every rebuild
+final userProfileProvider = FutureProvider.family<AppUser?, String>((ref, userId) {
+  return ref.read(firestoreServiceProvider).getUser(userId);
+});
 
 class AuthWrapper extends ConsumerWidget {
   const AuthWrapper({super.key});
@@ -26,19 +31,16 @@ class AuthWrapper extends ConsumerWidget {
 
 
         // Fetch user role
-        return FutureBuilder<AppUser?>(
-          future: ref.watch(firestoreServiceProvider).getUser(user.id),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(body: Center(child: CircularProgressIndicator()));
-            }
-            
-            final appUser = snapshot.data;
+        // Fetch user role (Cached)
+        final userProfileAsync = ref.watch(userProfileProvider(user.id));
+
+        return userProfileAsync.when(
+          data: (appUser) {
             if (appUser == null) {
               return const LoginScreen();
             }
 
-            // 🔔 Sync OneSignal Player ID
+            // 🔔 Sync OneSignal Player ID (Fire & Forget)
             Future.microtask(() {
               OneSignalManager.syncUser(appUser.id, appUser.oneSignalPlayerId);
             });
@@ -59,6 +61,15 @@ class AuthWrapper extends ConsumerWidget {
 
             // 🛡️ Force Notifications Wrapper
             return _NotificationEnforcer(child: home);
+          },
+          loading: () => const Scaffold(
+            backgroundColor: Colors.black, // Match theme for smoother load
+            body: Center(child: CircularProgressIndicator(color: Colors.blueAccent)),
+          ),
+          error: (e, trace) {
+             debugPrint('⚠️ Profile fetch error: $e');
+             // Retry button? Or just Login.
+             return const LoginScreen();
           },
         );
       },
