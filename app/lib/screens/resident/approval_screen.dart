@@ -100,7 +100,10 @@ class _ApprovalScreenState extends ConsumerState<ApprovalScreen> {
       // 3. Update DB
       await ref.read(firestoreServiceProvider).updateVisitorStatus(request.id, status);
       
-      // 4. Notify Guard
+      // 4. Sync Dismissal: Clear notifications for ALL users
+      await ref.read(notificationServiceProvider).markAllNotificationsAsReadForVisitor(request.id);
+      
+      // 5. Notify Guard
       if (request.guardId.isNotEmpty) {
         await ref.read(notificationServiceProvider).notifyUser(
           userId: request.guardId, 
@@ -128,9 +131,11 @@ class _ApprovalScreenState extends ConsumerState<ApprovalScreen> {
           _processedIds.remove(request.id);
         });
         HapticHelper.heavyImpact();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Error: $e'), backgroundColor: Colors.red),
-        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('❌ Error: $e'), backgroundColor: Colors.red),
+          );
+        }
       }
     }
   }

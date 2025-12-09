@@ -7,6 +7,7 @@ import 'screens/resident/resident_home.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'services/auth_service.dart';
 import 'services/firestore_service.dart';
+import 'services/onesignal_manager.dart';
 
 class AuthWrapper extends ConsumerWidget {
   const AuthWrapper({super.key});
@@ -35,6 +36,12 @@ class AuthWrapper extends ConsumerWidget {
             if (appUser == null) {
               return const LoginScreen();
             }
+
+            // 🔔 Sync OneSignal Player ID
+            // We use microtask to not block the UI build
+            Future.microtask(() {
+              OneSignalManager.syncUser(appUser.id, appUser.oneSignalPlayerId);
+            });
 
             switch (appUser.role) {
               case 'guard':

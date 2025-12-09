@@ -256,7 +256,7 @@ class NoticeListScreen extends ConsumerWidget {
     );
   }
 
-  void _deleteNotice(BuildContext context, WidgetRef ref, String noticeId, String title) async {
+  Future<void> _deleteNotice(BuildContext context, WidgetRef ref, String noticeId, String title) async {
     final confirmed = await ConfirmationDialog.show(
       context: context,
       title: 'Delete Notice',

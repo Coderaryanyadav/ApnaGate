@@ -7,12 +7,13 @@ import '../../services/firestore_service.dart';
 import '../../models/extras.dart';
 import '../../widgets/banner_ad_widget.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Added
 import 'package:flutter_background_service/flutter_background_service.dart'; // Added
 import 'package:supabase_flutter/supabase_flutter.dart'; // Added
+import '../../utils/persistence_helper.dart'; // Added
 import '../../models/user.dart';
 import '../../utils/app_routes.dart';
 import '../../utils/app_constants.dart';
-import '../debug/notification_debug_screen.dart';
 
 
 
@@ -100,8 +101,11 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
           .stream(primaryKey: ['id'])
           .listen((data) {
             // Filter for current user's unread notifications
+            // AND ignore 'Visitor' notifications (handled by background service)
             final userNotifications = data.where((n) => 
-              n['user_id'] == user.id && n['read'] == false
+              n['user_id'] == user.id && 
+              n['read'] == false &&
+              !(n['title'] ?? '').toString().contains('Visitor')
             ).toList();
             
             if (userNotifications.isNotEmpty) {
@@ -177,18 +181,18 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
     }
   }
 
-  void _initLocalNotifications() async {
+  Future<void> _initLocalNotifications() async {
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    final darwinSettings = DarwinInitializationSettings(
+    const darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    final initSettings = InitializationSettings(android: androidSettings, iOS: darwinSettings);
+    const initSettings = InitializationSettings(android: androidSettings, iOS: darwinSettings);
     await _localNotifications.initialize(initSettings);
   }
 
-  void _showLocalNotification(String title, String body) async {
+  Future<void> _showLocalNotification(String title, String body) async {
     const androidDetails = AndroidNotificationDetails(
       'visitor_notifications',
       'Visitor Notifications',
@@ -215,22 +219,13 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
   }
 
   void _setupVisitorListener() {
-    final user = ref.read(authServiceProvider).currentUser;
-    if (user == null) return;
-    
-    // Listen to REALTIME pending requests
-    _visitorSub = ref.read(firestoreServiceProvider).getPendingRequests(user.id).listen((requests) {
-       for (var r in requests) {
-         if (!_knownPendingIds.contains(r.id)) {
-            _knownPendingIds.add(r.id);
-            // Only alert newly discovered
-             _triggerLocalVisitorAlert(r.visitorName);
-         }
-       }
-    });
+    // 🛑 FOREGROUND NOTIFICATIONS DISABLED
+    // We rely on background_service.dart for all visitor notifications
+    // to prevent dual-alerting and hot-restart loops.
+    // The background service is robust, persistent, and strict.
   }
 
-  void _startBackgroundMonitor() async {
+  Future<void> _startBackgroundMonitor() async {
     final service = FlutterBackgroundService();
     final isRunning = await service.isRunning();
     if (!isRunning) {
@@ -246,7 +241,7 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
     }
   }
 
-  void _triggerLocalVisitorAlert(String visitorName) async {
+  Future<void> _triggerLocalVisitorAlert(String visitorName) async {
     const androidDetails = AndroidNotificationDetails(
       'high_importance_channel_v2', 
       'Critical Alerts',
@@ -264,7 +259,7 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
     );
   }
 
-  void _setupOneSignal() async {
+  Future<void> _setupOneSignal() async {
     // Run in background - don't await
     final user = ref.read(authServiceProvider).currentUser;
     if (user == null) return;

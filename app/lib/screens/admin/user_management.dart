@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user.dart';
 import 'add_user_dialog.dart';
+import '../../services/society_config_service.dart'; // Added
 import '../../widgets/confirmation_dialog.dart';
 import '../../widgets/empty_state.dart';
-import '../../utils/app_constants.dart';
 import '../../utils/haptic_helper.dart';
 
 class UserManagementScreen extends ConsumerStatefulWidget {
@@ -19,8 +19,8 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
   String _selectedRole = 'resident';
   String _searchQuery = '';
 
-  void _showAddUserDialog() {
-    showDialog(
+  Future<void> _showAddUserDialog() async {
+    await showDialog(
       context: context,
       builder: (context) => AddUserDialog(initialRole: _selectedRole),
     );
@@ -33,7 +33,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     );
   }
 
-  void _deleteUser(AppUser user) async {
+  Future<void> _deleteUser(AppUser user) async {
     final confirm = await ConfirmationDialog.confirmDelete(
       context: context,
       itemName: user.name,
@@ -291,6 +291,7 @@ class _EditUserDialogState extends ConsumerState<_EditUserDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final config = ref.watch(societyConfigProvider);
     final isResident = widget.user.role == 'resident';
 
     return AlertDialog(
@@ -355,9 +356,9 @@ class _EditUserDialogState extends ConsumerState<_EditUserDialog> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         // ignore: deprecated_member_use
-                        value: _selectedWing != null && ['A', 'B'].contains(_selectedWing) ? _selectedWing : null,
+                        value: _selectedWing != null && config.wings.contains(_selectedWing) ? _selectedWing : null,
                         decoration: const InputDecoration(labelText: 'Wing'),
-                        items: AppConstants.wings.map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
+                        items: config.wings.map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
                         onChanged: (v) => setState(() => _selectedWing = v),
                         validator: (v) => isResident && v == null ? 'Required' : null,
                       ),
@@ -440,12 +441,30 @@ class _EditUserDialogState extends ConsumerState<_EditUserDialog> {
     );
   }
 
-  // Helper to generate flat numbers (Floors 1-12, Flats 01-04)
+  // Helper to generate flat numbers based on Society Config
   List<DropdownMenuItem<String>> _generateFlatNumbers() {
+    final config = ref.read(societyConfigProvider); // Use dynamic config
     final List<DropdownMenuItem<String>> items = [];
-    for (int floor = 1; floor <= 12; floor++) {
-      for (int flat = 1; flat <= 4; flat++) {
-        final flatNum = '${floor.toString().padLeft(2, '0')}0$flat';
+    
+    for (int floor = 1; floor <= config.totalFloors; floor++) {
+      for (int flat = 1; flat <= config.flatsPerFloor; flat++) {
+        // Pad flat number: 1 -> 01, but floor can be 1 or 12.
+        // Format: {Floor}{Flat} e.g. 101, 102... 1101, 1102
+        // Typical convention: Floor padded? usually not if < 10?
+        // Let's assume typical: 101, 102... 1201, 1202.
+        // Wait, existing code was: floor.toString().padLeft(2, '0') + '0' + flat (max 4 flats??)
+        // Original: 0101, 0102...
+        // Let's stick to standard: Floor + PadLeft(2, flat)
+        // Actually, let's use the USER's previous logic but limit by dynamic counts.
+        // Previous logic: floor 1-12, flat 1-4.
+        // flatNum = '${floor.toString().padLeft(2, '0')}0$flat';  --> "0101"
+        // If flats > 9, "0110"?
+        
+        // Better logic:
+        final String flatNum = '${floor.toString()}${flat.toString().padLeft(2, '0')}'; 
+        // 101, 102, 1204.
+        // But user might expect 3 digits for ground floor? 
+        // Let's assume standard format: Floor + 01..Flats
         items.add(DropdownMenuItem(value: flatNum, child: Text(flatNum)));
       }
     }

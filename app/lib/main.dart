@@ -41,7 +41,7 @@ void main() async {
     // ignore: unawaited_futures
     Future.microtask(() async {
       await AdsService.initialize();
-      _initOneSignalBackground();
+      await _initOneSignalBackground();
     });
   }, (error, stack) {
     // Log all uncaught errors
@@ -53,8 +53,8 @@ void main() async {
 
 Future<void> _initOneSignalBackground() async {
   try {
-    OneSignal.Debug.setLogLevel(OSLogLevel.verbose); // Changed to verbose for debugging
-    OneSignal.initialize('5e9deb0b-b39a-4259-ae19-5f9d05840b03');
+     await OneSignal.Debug.setLogLevel(OSLogLevel.verbose); // Changed to verbose for debugging
+    OneSignal.initialize(SupabaseConfig.oneSignalAppId);
     
     // Wait for OneSignal to be ready
     await Future.delayed(const Duration(milliseconds: 1000));

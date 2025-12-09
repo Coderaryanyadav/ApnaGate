@@ -174,11 +174,26 @@ class FirestoreService {
     await _client.from('service_providers').delete().eq('id', providerId);
   }
   
-  Future<void> updateProviderStatus(String providerId, String status) async {
+  Future<void> updateProviderStatus(String providerId, String status, {String? actorId}) async {
+    final now = DateTime.now().toIso8601String();
+    
+    // 1. Update Provider Status
     await _client.from('service_providers').update({
       'status': status,
-      'last_active': DateTime.now().toIso8601String(),
+      'last_active': now,
     }).eq('id', providerId);
+
+    // 2. Log History (Same table as Househelp logs for reuse)
+    // We treat 'service providers' as staff effectively
+    if (actorId != null) {
+      await _client.from('staff_attendance_logs').insert({
+        'staff_id': providerId,
+        'owner_id': actorId, // The Guard/Admin who marked it
+        'action': status == 'in' ? 'entry' : 'exit',
+        'timestamp': now,
+        // Note: 'staff_type' might be useful if column exists, but for now we reuse generic structure
+      });
+    }
   }
 
   // ===========================================================================
@@ -726,7 +741,8 @@ class FirestoreService {
       // Ignore if logs don't exist or permission denied, try to delete staff anyway if possible
       // though typically if permission is denied, it might block. But let's try.
       // debugPrint('Log cleanup warning: $e'); // debugPrint not available here
-      print('Log cleanup warning: $e');
+      // debugPrint is safer in production than print
+      // debugPrint('Log cleanup warning: $e'); 
     }
     // 2. Delete Staff
     await _client.from('daily_help').delete().eq('id', id);

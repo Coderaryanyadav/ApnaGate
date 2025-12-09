@@ -8,9 +8,9 @@ import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/society_config_service.dart';
 import '../../utils/input_validator.dart';
 import '../../utils/haptic_helper.dart';
-import '../../utils/app_constants.dart';
 import '../../widgets/loading_widgets.dart';
 
 class AddVisitorScreen extends ConsumerStatefulWidget {
@@ -29,7 +29,7 @@ class _AddVisitorScreenState extends ConsumerState<AddVisitorScreen> {
   final bool _isLoading = false;
 
   // Selection State
-  String _selectedWing = AppConstants.wings[0];
+  String? _selectedWing;
   String _selectedPurpose = 'Delivery';
 
   Future<void> _pickImage() async {
@@ -44,6 +44,10 @@ class _AddVisitorScreenState extends ConsumerState<AddVisitorScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedWing == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a Wing')));
+      return;
+    }
     if (_imageFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo is required!')));
       return;
@@ -57,7 +61,7 @@ class _AddVisitorScreenState extends ConsumerState<AddVisitorScreen> {
       
       // 1. Validate Resident
       final flat = _flatController.text.trim();
-      final residents = await firestore.getResidentsByFlat(_selectedWing, flat);
+      final residents = await firestore.getResidentsByFlat(_selectedWing!, flat);
 
       if (residents.isEmpty) {
         throw Exception('No resident found in $_selectedWing - $flat');
@@ -75,7 +79,7 @@ class _AddVisitorScreenState extends ConsumerState<AddVisitorScreen> {
         visitorPhone: _phoneController.text.trim(),
         photoUrl: photoUrl,
         purpose: _selectedPurpose,
-        wing: _selectedWing, // ✅ Added wing
+        wing: _selectedWing!, // ✅ Added wing
         flatNumber: flat, // ✅ Changed to just flat number
         residentId: residents.first.id,
         guardId: currentUser?.id ?? '',
@@ -87,10 +91,11 @@ class _AddVisitorScreenState extends ConsumerState<AddVisitorScreen> {
 
       // 🔔 Notify ALL residents of the flat (handled by notifyFlat)
       await ref.read(notificationServiceProvider).notifyFlat(
-        wing: _selectedWing,
+        wing: _selectedWing!,
         flatNumber: flat,
         title: '🔔 New Visitor!',
         message: '${request.visitorName} is waiting at $_selectedWing-$flat',
+        visitorId: request.id,
       );
 
       LoadingOverlay.hide();
@@ -153,16 +158,21 @@ class _AddVisitorScreenState extends ConsumerState<AddVisitorScreen> {
                 children: [
                   Expanded(
                     flex: 1,
-                    child: DropdownButtonFormField<String>(
-                      // ignore: deprecated_member_use
-                      value: _selectedWing,
-                      decoration: const InputDecoration(
-                        labelText: 'Wing',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                      ),
-                      items: AppConstants.wings.map((w) => DropdownMenuItem(value: w, child: Text(w, style: const TextStyle(fontWeight: FontWeight.bold)))).toList(),
-                      onChanged: (v) => setState(() => _selectedWing = v!),
+                    child: Consumer(
+                      builder: (context, ref, _) {
+                        final config = ref.watch(societyConfigProvider);
+                        return DropdownButtonFormField<String>(
+                          // ignore: deprecated_member_use
+                          value: _selectedWing != null && config.wings.contains(_selectedWing) ? _selectedWing : null,
+                          decoration: const InputDecoration(
+                            labelText: 'Wing',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                          ),
+                          items: config.wings.map((w) => DropdownMenuItem(value: w, child: Text(w, style: const TextStyle(fontWeight: FontWeight.bold)))).toList(),
+                          onChanged: (v) => setState(() => _selectedWing = v!),
+                        );
+                      }
                     ),
                   ),
                   const SizedBox(width: 12),

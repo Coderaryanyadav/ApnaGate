@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
+import '../../services/society_config_service.dart'; // Added
 import '../../models/user.dart';
 import '../../utils/input_validator.dart';
-import '../../utils/app_constants.dart';
 import '../../widgets/loading_widgets.dart';
 import '../../utils/haptic_helper.dart';
 
@@ -32,6 +32,7 @@ class _AddUserDialogState extends ConsumerState<AddUserDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final config = ref.watch(societyConfigProvider); // Dynamic Config
     return AlertDialog(
       title: Text('Add ${widget.initialRole.toUpperCase()}'),
       content: SingleChildScrollView(
@@ -52,7 +53,7 @@ class _AddUserDialogState extends ConsumerState<AddUserDialog> {
                       // ignore: deprecated_member_use
                       value: _selectedWing,
                       decoration: const InputDecoration(labelText: 'Wing'),
-                      items: AppConstants.wings.map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
+                      items: config.wings.map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
                       onChanged: (v) => setState(() => _selectedWing = v),
                     ),
                   ),
@@ -62,7 +63,7 @@ class _AddUserDialogState extends ConsumerState<AddUserDialog> {
                       // ignore: deprecated_member_use
                       value: _selectedFloor,
                       decoration: const InputDecoration(labelText: 'Floor'),
-                      items: List.generate(12, (i) => (i + 1).toString())
+                      items: List.generate(config.totalFloors, (i) => (i + 1).toString())
                           .map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
                       onChanged: (v) => setState(() {
                         _selectedFloor = v;
@@ -77,8 +78,8 @@ class _AddUserDialogState extends ConsumerState<AddUserDialog> {
                   // ignore: deprecated_member_use
                   value: _selectedFlat,
                   decoration: const InputDecoration(labelText: 'Flat'),
-                  items: List.generate(4, (i) {
-                    final flatNum = '${_selectedFloor!.padLeft(2, '0')}0${i + 1}';
+                  items: List.generate(config.flatsPerFloor, (i) {
+                    final flatNum = '${_selectedFloor!.padLeft(2, '0')}0${i + 1}'; // Keep 01 format for now, or use _generateFlat helper logic?
                     return DropdownMenuItem(value: flatNum, child: Text(flatNum));
                   }).toList(),
                   onChanged: (v) => setState(() => _selectedFlat = v),

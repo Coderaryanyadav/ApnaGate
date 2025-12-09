@@ -1,0 +1,8 @@
+{
+  "appTitle": "Crescent Gate",
+  "loginButton": "Login",
+  "welcomeMessage": "Welcome Back!",
+  "visitorRequest": "Visitor Request",
+  "approve": "Approve",
+  "reject": "Reject"
+}

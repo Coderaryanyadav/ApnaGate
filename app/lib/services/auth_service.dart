@@ -6,6 +6,7 @@ import '../supabase_config.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../utils/error_logger.dart';
+import 'package:flutter_background_service/flutter_background_service.dart'; // Added
 
 final authServiceProvider = Provider<AuthService>((ref) {
   return AuthService(Supabase.instance.client.auth);
@@ -168,7 +169,9 @@ class AuthService {
   Future<void> signOut() async {
     try {
       await OneSignal.logout();
-    } catch (_) {} // Ignote errors
+    } catch (_) {} // Ignore errors
+    // Stop background monitoring to prevent zombie notifications
+    FlutterBackgroundService().invoke('stop_monitoring');
     await _auth.signOut();
   }
   

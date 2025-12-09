@@ -58,13 +58,18 @@ class NotificationService {
       if (!isSilent) {
         body['ios_sound'] = 'notification.wav';
         body['android_sound'] = 'notification';
+        body['android_channel_id'] = 'high_importance_channel_v2'; // Match local channel
+        body['content_available'] = true; // Wake up iOS app
+        body['mutable_content'] = true; // Allow media
       }
 
       final response = await http.post(
         Uri.parse(_baseUrl),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Basic $_oneSignalRestApiKey',
+          'Authorization': _oneSignalRestApiKey.startsWith('os_v2_') 
+              ? 'Key $_oneSignalRestApiKey' 
+              : 'Basic $_oneSignalRestApiKey',
         },
         body: jsonEncode(body),
       );
@@ -110,13 +115,17 @@ class NotificationService {
         // Removed android_channel_id - using OneSignal default
         body['ios_sound'] = 'notification.wav';
         body['android_sound'] = 'notification';
+        body['content_available'] = true;
+        body['mutable_content'] = true;
       }
 
       final response = await http.post(
         Uri.parse(_baseUrl),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Basic $_oneSignalRestApiKey',
+          'Authorization': _oneSignalRestApiKey.startsWith('os_v2_') 
+              ? 'Key $_oneSignalRestApiKey' 
+              : 'Basic $_oneSignalRestApiKey',
         },
         body: jsonEncode(body),
       );
@@ -138,6 +147,7 @@ class NotificationService {
     required String flatNumber,
     required String title,
     required String message,
+    String? visitorId, // ✅ Added optional parameter
   }) async {
     try {
       // Query database for all users in this flat
@@ -161,6 +171,7 @@ class NotificationService {
               userId: user['id'],
               title: title,
               message: message,
+              data: visitorId != null ? {'visitor_id': visitorId} : null,
             );
           } catch (_) {}
           
@@ -170,7 +181,12 @@ class NotificationService {
               'user_id': user['id'],
               'title': title,
               'message': message,
-              'data': {'type': 'visitor_arrival', 'wing': wing, 'flat_number': flatNumber},
+              'data': {
+                'type': 'visitor_arrival', 
+                'wing': wing, 
+                'flat_number': flatNumber,
+                if (visitorId != null) 'visitor_id': visitorId
+              },
             });
           } catch (e) {
             debugPrint('realtime_error:${user['id']}:$e'); 
@@ -287,5 +303,21 @@ class NotificationService {
         'alert': 'true', // Force alert sound
       },
     );
+  }
+
+  /// 🧹 Sync Dismissal: Mark all notifications for this visitor as read for EVERYONE
+  Future<void> markAllNotificationsAsReadForVisitor(String visitorId) async {
+    try {
+      final supabase = Supabase.instance.client;
+      // This update query uses the JSON filter to find all notifications for this visitor
+      await supabase
+          .from('notifications')
+          .update({'read': true})
+          .eq('data->>visitor_id', visitorId);
+          
+      debugPrint('🧹 Synced dismissal: Notifications for visitor $visitorId marked as read for all users');
+    } catch (e) {
+      debugPrint('❌ Failed to sync dismissal: $e');
+    }
   }
 }

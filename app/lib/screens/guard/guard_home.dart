@@ -52,18 +52,18 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
     super.dispose();
   }
 
-  void _initLocalNotifications() async { // Added
+  Future<void> _initLocalNotifications() async { // Added
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    final darwinSettings = DarwinInitializationSettings(
+    const darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    final initSettings = InitializationSettings(android: androidSettings, iOS: darwinSettings);
+    const initSettings = InitializationSettings(android: androidSettings, iOS: darwinSettings);
     await _localNotifications.initialize(initSettings);
   }
 
-  void _triggerLocalSOS(Map<String, dynamic> alert) async { // Added
+  Future<void> _triggerLocalSOS(Map<String, dynamic> alert) async { // Added
     const androidDetails = AndroidNotificationDetails(
       'crescent_gate_alarm_v2', 
       'Critical Alerts',

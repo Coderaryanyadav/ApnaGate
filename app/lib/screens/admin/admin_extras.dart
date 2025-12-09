@@ -328,7 +328,7 @@ class ServiceProviderAdminScreen extends ConsumerWidget {
     );
   }
 
-  void _deleteProvider(BuildContext context, WidgetRef ref, String id) async {
+  Future<void> _deleteProvider(BuildContext context, WidgetRef ref, String id) async {
     final confirmed = await ConfirmationDialog.confirmDelete(
       context: context,
       itemName: 'service provider',

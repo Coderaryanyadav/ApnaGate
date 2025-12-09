@@ -174,7 +174,7 @@ class ComplaintListScreen extends ConsumerWidget {
     }
   }
 
-  void _showAddDialog(BuildContext context, WidgetRef ref) async {
+  Future<void> _showAddDialog(BuildContext context, WidgetRef ref) async {
     final user = ref.read(authServiceProvider).currentUser;
     if (user == null) return;
     

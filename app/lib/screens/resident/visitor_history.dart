@@ -23,7 +23,7 @@ class _VisitorHistoryScreenState extends ConsumerState<VisitorHistoryScreen> {
 
   // Group visitors by day
   Map<DateTime, List<VisitorRequest>> _groupVisitorsByDay(List<VisitorRequest> visitors) {
-    Map<DateTime, List<VisitorRequest>> data = {};
+    final Map<DateTime, List<VisitorRequest>> data = {};
     for (var visitor in visitors) {
       // Normalize date to UTC midnight for comparison or just local YMD
       final date = DateTime(

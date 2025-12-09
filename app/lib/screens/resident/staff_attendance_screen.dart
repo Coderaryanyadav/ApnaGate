@@ -21,7 +21,7 @@ class StaffAttendanceScreen extends ConsumerStatefulWidget {
 class _StaffAttendanceScreenState extends ConsumerState<StaffAttendanceScreen> {
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
-  DateTime? _selectedDay;
+  DateTime? _selectedDay = DateTime.now(); // Initialize to Today
 
   @override
   Widget build(BuildContext context) {
@@ -38,19 +38,27 @@ class _StaffAttendanceScreenState extends ConsumerState<StaffAttendanceScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final logs = snapshot.data ?? [];
+          final allLogs = snapshot.data ?? [];
 
           // Process logs into a Set of "Present Days"
-          // We consider a day "Present" if there is at least one 'entry' log
           final Set<String> presentDates = {};
           
-          for (var log in logs) {
+          for (var log in allLogs) {
              if (log['action'] == 'entry' && log['timestamp'] != null) {
                 final dt = DateTime.parse(log['timestamp']).toLocal();
                 final key = DateFormat('yyyy-MM-dd').format(dt);
                 presentDates.add(key);
              }
           }
+
+          // Filter Logs for Viewer
+          final filteredLogs = _selectedDay == null 
+              ? allLogs 
+              : allLogs.where((log) {
+                  if (log['timestamp'] == null) return false;
+                  final dt = DateTime.parse(log['timestamp']).toLocal();
+                  return isSameDay(dt, _selectedDay);
+                }).toList();
 
           return Column(
             children: [
@@ -148,24 +156,31 @@ class _StaffAttendanceScreenState extends ConsumerState<StaffAttendanceScreen> {
                 ),
               ),
 
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
                   children: [
-                    Icon(Icons.history, color: Colors.white54, size: 16),
-                    SizedBox(width: 8),
-                    Text('Detailed Logs', style: TextStyle(color: Colors.white54, fontSize: 14)),
+                    const Icon(Icons.history, color: Colors.white54, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      _selectedDay == null 
+                        ? 'All Logs' 
+                        : 'Logs for ${DateFormat('MMM dd').format(_selectedDay!)}', 
+                      style: const TextStyle(color: Colors.white54, fontSize: 14)
+                    ),
                   ],
                 ),
               ),
 
               // LOGS LIST
               Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: logs.length,
-                  itemBuilder: (context, index) {
-                    final log = logs[index];
+                child: filteredLogs.isEmpty 
+                  ? const Center(child: Text('No attendance records', style: TextStyle(color: Colors.white24)))
+                  : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: filteredLogs.length,
+                    itemBuilder: (context, index) {
+                      final log = filteredLogs[index];
                     final isEntry = log['action'] == 'entry';
                     final dt = DateTime.parse(log['timestamp']).toLocal();
                     

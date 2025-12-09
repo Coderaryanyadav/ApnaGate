@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
-import '../../utils/app_constants.dart';
 import 'staff_attendance_screen.dart'; // Added
 
 class HousehelpScreen extends ConsumerStatefulWidget {
@@ -24,7 +24,7 @@ class _HousehelpScreenState extends ConsumerState<HousehelpScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('Manage Daily Help'),
+        title: const Text('Manage Daily Help'), 
         backgroundColor: Colors.transparent,
       ),
       body: FutureBuilder(
@@ -149,7 +149,7 @@ class _HousehelpScreenState extends ConsumerState<HousehelpScreen> {
               CircleAvatar(
                 radius: 28,
                 backgroundColor: Colors.grey.withValues(alpha: 0.2),
-                backgroundImage: staff['photo_url'] != null ? NetworkImage(staff['photo_url']) : null,
+                backgroundImage: staff['photo_url'] != null ? CachedNetworkImageProvider(staff['photo_url']) : null,
                 child: staff['photo_url'] == null 
                   ? const Icon(Icons.person, color: Colors.white54) 
                   : null,
@@ -327,6 +327,7 @@ class _HousehelpScreenState extends ConsumerState<HousehelpScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+                    // ignore: deprecated_member_use
                     value: role,
                     items: ['Maid', 'Driver', 'Cook', 'Nanny', 'Other'].map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
                     onChanged: (v) => setDialogState(() => role = v!),
@@ -370,7 +371,7 @@ class _HousehelpScreenState extends ConsumerState<HousehelpScreen> {
                     photoUrl: photoUrl,
                   );
                   
-                  if (mounted) Navigator.pop(dialogContext);
+                  if (mounted && dialogContext.mounted) Navigator.pop(dialogContext);
                 },
                 child: const Text('Add'),
               ),

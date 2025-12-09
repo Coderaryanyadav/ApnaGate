@@ -16,7 +16,9 @@ class HouseholdScreen extends ConsumerStatefulWidget {
 
 class _HouseholdScreenState extends ConsumerState<HouseholdScreen> {
   
-  void _showAddMemberDialog() async {
+
+
+  Future<void> _showAddMemberDialog() async {
     final user = ref.read(authServiceProvider).currentUser;
     if (user == null) return;
     final currentUser = await ref.read(firestoreServiceProvider).getUser(user.id);
@@ -239,7 +241,37 @@ class _HouseholdScreenState extends ConsumerState<HouseholdScreen> {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const LoadingList(message: 'Loading household members...');
               }
-              final members = snapshot.data ?? [];
+              
+              // Create modifiable list and inject Current User
+              final members = List<Map<String, dynamic>>.from(snapshot.data ?? []);
+              
+              final isUserInList = members.any((m) => m['id'] == currentUser.id); // Assuming registry items have 'id' matching user if registered, or linked
+              // Actually registry items have their own UUID. Linked User ID IS in 'id' if registered? 
+              // Wait, registry 'id' is row ID. 'linked_user_id' might be the user ID? Or Profile ID?
+              // The logic below assumes generic display.
+              // Let's safe-check by Name or Phone if ID mismatch.
+              // But simplest is just Prepend "You".
+              
+              if (!isUserInList) {
+                 // Check if any member has same phone?
+                 final phoneMatch = members.indexWhere((m) => m['phone'] == currentUser.phone);
+                 if (phoneMatch != -1) {
+                    // Update name to include (You)?
+                    members[phoneMatch]['name'] += ' (You)';
+                    members[phoneMatch]['is_current_user'] = true;
+                 } else {
+                    // Prepend
+                    members.insert(0, {
+                      'id': currentUser.id,
+                      'name': '${currentUser.name} (You)',
+                      'role': 'Owner',
+                      'phone': currentUser.phone,
+                      'is_registered': true,
+                      'photo_url': currentUser.photoUrl,
+                      'is_current_user': true, 
+                    });
+                 }
+              }
 
               return CustomScrollView(
                 slivers: [
@@ -291,6 +323,7 @@ class _HouseholdScreenState extends ConsumerState<HouseholdScreen> {
                     (context, index) {
                       final member = members[index];
                       final isRegistered = member['is_registered'] == true;
+                      final isCurrentUser = member['is_current_user'] == true;
                       
                       return Container(
                         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -304,10 +337,11 @@ class _HouseholdScreenState extends ConsumerState<HouseholdScreen> {
                           leading: CircleAvatar(
                              radius: 24,
                              backgroundColor: isRegistered ? Colors.green.withValues(alpha: 0.2) : Colors.orange.withValues(alpha: 0.2),
-                             child: Icon(
-                               member['role'] == 'family' ? Icons.favorite : Icons.person,
-                               color: member['role'] == 'family' ? Colors.pinkAccent : Colors.blueAccent,
-                             ),
+                             backgroundImage: member['photo_url'] != null ? NetworkImage(member['photo_url']) : null,
+                             child: member['photo_url'] == null ? Icon(
+                               member['role'] == 'family' || member['role'] == 'Owner' ? Icons.favorite : Icons.person,
+                               color: member['role'] == 'family' || member['role'] == 'Owner' ? Colors.pinkAccent : Colors.blueAccent,
+                             ) : null,
                           ),
                           title: Text(member['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                           subtitle: Column(
@@ -332,7 +366,7 @@ class _HouseholdScreenState extends ConsumerState<HouseholdScreen> {
                               ),
                             ],
                           ),
-                          trailing: IconButton(
+                          trailing: isCurrentUser ? null : IconButton(
                             icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                             onPressed: () => _confirmDelete(member['id']),
                           ),

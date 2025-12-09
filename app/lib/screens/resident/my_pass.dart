@@ -155,14 +155,32 @@ class _MyPassScreenState extends ConsumerState<MyPassScreen> with SingleTickerPr
                         const SizedBox(height: 16),
                         
                         // Profile Image
-                        Container(
-                          width: 120,
-                          height: 120,
-                          decoration: BoxDecoration(
-                            color: Colors.white24,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                            image: DecorationImage(image: NetworkImage(profile.photoUrl!), fit: BoxFit.cover),
+                        // Profile Image (Clickable)
+                        GestureDetector(
+                          onTap: () => _uploadPhoto(profile),
+                          child: Stack(
+                            alignment: Alignment.bottomRight,
+                            children: [
+                              Container(
+                                width: 120,
+                                height: 120,
+                                decoration: BoxDecoration(
+                                  color: Colors.white24,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 3),
+                                  image: DecorationImage(image: NetworkImage(profile.photoUrl!), fit: BoxFit.cover),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.blueAccent,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                ),
+                                child: const Icon(Icons.edit, color: Colors.white, size: 16),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -301,6 +319,20 @@ class _MyPassScreenState extends ConsumerState<MyPassScreen> with SingleTickerPr
       );
 
       if (image == null) return;
+
+      // 🛑 LIMITATION: Check File Size (Max 2MB)
+      final sizeBytes = await image.length();
+      if (sizeBytes > 2 * 1024 * 1024) { // 2MB
+        if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Image too large. Max size is 2MB.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
 
       // Show loading
       if (!mounted) return;

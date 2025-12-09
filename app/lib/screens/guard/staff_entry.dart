@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/extras.dart';
 import '../../services/notification_service.dart';
 import '../../services/firestore_service.dart';
+import '../../services/auth_service.dart';
+import '../resident/staff_attendance_screen.dart';
 
 class StaffEntryScreen extends ConsumerStatefulWidget {
   const StaffEntryScreen({super.key});
@@ -74,17 +76,33 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
                           '${staff.category} • ${staff.status == 'in' ? 'Since' : 'Last seen'}: ${staff.lastActive != null ? TimeOfDay.fromDateTime(staff.lastActive!).format(context) : 'N/A'}',
                           style: const TextStyle(fontSize: 12, color: Colors.grey),
                         ),
-                        trailing: SizedBox(
-                          width: 120,
-                          child: ElevatedButton(
-                            onPressed: () => _toggleStatus(staff),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: isIn ? Colors.red : Colors.green,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.calendar_month, color: Colors.blueAccent),
+                              onPressed: () => Navigator.push(
+                                context, 
+                                MaterialPageRoute(
+                                  builder: (_) => StaffAttendanceScreen(staffId: staff.id, staffName: staff.name)
+                                )
+                              ),
                             ),
-                            child: Text(isIn ? 'CHECK OUT' : 'CHECK IN'),
-                          ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 100,
+                              child: ElevatedButton(
+                                onPressed: () => _toggleStatus(staff),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isIn ? Colors.red : Colors.green,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 0),
+                                ),
+                                child: Text(isIn ? 'CHECK OUT' : 'CHECK IN', style: const TextStyle(fontSize: 12)),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -104,8 +122,16 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
     HapticFeedback.mediumImpact();
     
     final newStatus = staff.status == 'in' ? 'out' : 'in';
-    // 1. Update Database
-    await ref.read(firestoreServiceProvider).updateProviderStatus(staff.id, newStatus);
+    
+    // Get Current User (Guard) for logging
+    final currentUser = ref.read(authServiceProvider).currentUser;
+    
+    // 1. Update Database & Log
+    await ref.read(firestoreServiceProvider).updateProviderStatus(
+       staff.id, 
+       newStatus,
+       actorId: currentUser?.id, // Log who did it
+    );
     
     // 2. Notify Admin
     try {

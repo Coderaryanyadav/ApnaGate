@@ -3,7 +3,9 @@ import 'dart:async';
 import 'dart:ui';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Added
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/persistence_helper.dart'; // Added
 import '../supabase_config.dart';
 
 // Entry point
@@ -38,7 +40,7 @@ Future<void> initializeBackgroundService() async {
 }
 
 @pragma('vm:entry-point')
-void onStart(ServiceInstance service) async {
+Future<void> onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
   
   final FlutterLocalNotificationsPlugin localNotif = FlutterLocalNotificationsPlugin();
@@ -53,17 +55,30 @@ void onStart(ServiceInstance service) async {
   );
   await localNotif.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(alertChannel);
 
+  // Subscription holder
+  StreamSubscription? visitorSub;
+
   // Listen for User Data
   service.on('start_monitoring').listen((event) {
     if (event == null) return;
+    
+    // Check if we are already monitoring this user to avoid duplicate streams
     final String userId = event['user_id'];
+    
+    visitorSub?.cancel();
     final String token = event['token']; // Auth Token for RLS
     
-    _startSupabaseStream(userId, token, localNotif);
+    visitorSub = _startSupabaseStream(userId, token, localNotif);
+  });
+
+  // Listen for Logout
+  service.on('stop_monitoring').listen((event) {
+    visitorSub?.cancel();
+    visitorSub = null;
   });
 }
 
-void _startSupabaseStream(String userId, String token, FlutterLocalNotificationsPlugin notif) {
+StreamSubscription _startSupabaseStream(String userId, String token, FlutterLocalNotificationsPlugin notif) {
   // Manual Supabase Client (No Auth Flow, just specific queries)
   final client = SupabaseClient(
     SupabaseConfig.url, 
@@ -74,36 +89,70 @@ void _startSupabaseStream(String userId, String token, FlutterLocalNotifications
   final Set<String> knownIds = {};
   
   // Visitor Stream
-  client.from('visitors')
+  return client.from('visitors')
     .stream(primaryKey: ['id'])
-    .listen((List<Map<String, dynamic>> data) {
+    .listen((List<Map<String, dynamic>> data) async {
+      final alertedIds = await PersistenceHelper.loadAlertedIds();
       
-      final myPending = data.where((e) => 
-        e['resident_id'] == userId && 
-        e['status'] == 'pending'
+      // Fetch user profile to filter by Wing/Flat (Matching UI Logic)
+      final profile = await client.from('profiles')
+          .select('wing, flat_number')
+          .eq('id', userId)
+          .maybeSingle();
+
+      final String? userWing = profile?['wing'];
+      final String? userFlat = profile?['flat_number'];
+
+      final relevantVisitors = data.where((e) => 
+        // Monitor ALL statuses to handle cancellations
+        // Strict Filter: Must match Wing & Flat (if set)
+        (userWing != null && e['wing'] == userWing) &&
+        (userFlat != null && e['flat_number'] == userFlat) 
       ).toList();
 
-      for (var visit in myPending) {
+      for (var visit in relevantVisitors) {
         final id = visit['id'] as String;
-        if (!knownIds.contains(id)) {
-          knownIds.add(id);
           
-          // Trigger Notification
-          notif.show(
-            DateTime.now().millisecond,
-            '🔔 New Visitor',
-            '${visit['visitor_name']} is waiting (Background)',
-            const NotificationDetails(
-              android: AndroidNotificationDetails(
-                'crescent_gate_alarm_v2',
-                'Critical Alerts',
-                importance: Importance.max,
-                priority: Priority.high,
-                sound: RawResourceAndroidNotificationSound('notification'),
-              ),
-            ),
-          );
-        }
+          // Deterministic Notification ID based on Visitor ID
+          final notificationId = id.hashCode;
+
+          if (visit['status'] == 'pending') {
+            // Check local memory AND persistent storage for pending visitors
+            if (!knownIds.contains(id) && !alertedIds.contains(id)) {
+              knownIds.add(id);
+              
+              final createdAt = DateTime.tryParse(visit['created_at'] ?? '') ?? DateTime(2000);
+              // Freshness check (45s) - Ultra Strict
+              final isFresh = createdAt.isAfter(DateTime.now().subtract(const Duration(seconds: 45)));
+
+              if (isFresh) {
+                // Save FIRST
+                await PersistenceHelper.saveAlertedId(id);
+                alertedIds.add(id); // Update local cache
+                
+                // Trigger Notification
+                notif.show(
+                  notificationId, // <--- DETEMINISTIC ID
+                  '🔔 New Visitor',
+                  '${visit['visitor_name']} is waiting',
+                  const NotificationDetails(
+                    android: AndroidNotificationDetails(
+                      'crescent_gate_alarm_v2',
+                      'Critical Alerts',
+                      importance: Importance.max,
+                      priority: Priority.high,
+                      sound: RawResourceAndroidNotificationSound('notification'),
+                    ),
+                  ),
+                );
+              }
+            }
+          } else {
+             // 🛑 Status CHANGED (Approved/Denied/Exit)
+             // Cancel the notification if it exists
+             await notif.cancel(notificationId);
+          }
       }
     });
 }
+

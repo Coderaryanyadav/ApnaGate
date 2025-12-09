@@ -17,6 +17,7 @@ class AppUser {
   final String? ownerId;
   final List<String>? familyMembers;
   final String? photoUrl; // Added
+  final String? oneSignalPlayerId;
   final DateTime createdAt;
 
   AppUser({
@@ -31,6 +32,7 @@ class AppUser {
     this.ownerId,
     this.familyMembers,
     this.photoUrl,
+    this.oneSignalPlayerId,
     required this.createdAt,
   });
 
@@ -49,6 +51,7 @@ class AppUser {
           ? List<String>.from(map['family_members'] ?? map['familyMembers'])
           : null,
       photoUrl: map['photo_url'],
+      oneSignalPlayerId: map['onesignal_player_id'],
       createdAt: _parseDate(map['created_at'] ?? map['createdAt']),
     );
   }
@@ -66,6 +69,7 @@ class AppUser {
       'owner_id': ownerId,
       'family_members': familyMembers,
       'photo_url': photoUrl,
+      'onesignal_player_id': oneSignalPlayerId,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -82,6 +86,7 @@ class AppUser {
     String? ownerId,
     List<String>? familyMembers,
     String? photoUrl,
+    String? oneSignalPlayerId,
     DateTime? createdAt,
   }) {
     return AppUser(
@@ -96,6 +101,7 @@ class AppUser {
       ownerId: ownerId ?? this.ownerId,
       familyMembers: familyMembers ?? this.familyMembers,
       photoUrl: photoUrl ?? this.photoUrl,
+      oneSignalPlayerId: oneSignalPlayerId ?? this.oneSignalPlayerId,
       createdAt: createdAt ?? this.createdAt,
     );
   }

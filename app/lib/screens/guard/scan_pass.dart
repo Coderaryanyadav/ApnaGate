@@ -30,7 +30,7 @@ class _ScanPassScreenState extends ConsumerState<ScanPassScreen> with SingleTick
     super.dispose();
   }
 
-  void _onDetect(BarcodeCapture capture) async {
+  Future<void> _onDetect(BarcodeCapture capture) async {
     if (_isProcessing) return;
     
     final List<Barcode> barcodes = capture.barcodes;
@@ -119,8 +119,6 @@ class _ScanPassScreenState extends ConsumerState<ScanPassScreen> with SingleTick
         // --- RESIDENT VERIFICATION LOGIC ---
         HapticHelper.mediumImpact();
 
-        final String flatInfo = '${user.wing ?? '?'}-${user.flatNumber ?? '?'}';
-        
         if (!mounted) return;
         _showPremiumDialog(
           isSuccess: true,

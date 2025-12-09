@@ -367,7 +367,7 @@ class VisitorCard extends StatelessWidget {
       backgroundColor: Colors.black,
       body: PhotoView(
         imageProvider: photoUrl.startsWith('http')
-            ? NetworkImage(photoUrl) as ImageProvider
+            ? CachedNetworkImageProvider(photoUrl) as ImageProvider
             : MemoryImage(base64Decode(photoUrl)),
         minScale: PhotoViewComputedScale.contained,
         maxScale: PhotoViewComputedScale.covered * 2,

@@ -1,8 +1,8 @@
 
 DateTime _parseDate(dynamic val) {
-  if (val == null) return DateTime.now();
-  if (val is String) return DateTime.parse(val);
-  return DateTime.now();
+  if (val == null) return DateTime(2000); // Default to old date to prevent 'fresh' loops
+  if (val is String) return DateTime.tryParse(val) ?? DateTime(2000);
+  return DateTime(2000);
 }
 
 class VisitorRequest {
