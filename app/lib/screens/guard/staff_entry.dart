@@ -125,12 +125,26 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
     final newStatus = staff.status == 'in' ? 'out' : 'in';
     final currentUser = ref.read(authServiceProvider).currentUser;
 
+    String? residentId;
+    if (wing != null && flat != null && flat.isNotEmpty) {
+      // Resolve Resident for Logging (owner_id)
+      try {
+        final residents = await ref.read(firestoreServiceProvider).getResidentsByFlat(wing, flat);
+        if (residents.isNotEmpty) {
+          residentId = residents.first.id;
+        }
+      } catch (e) {
+        debugPrint('Failed to resolve resident: $e');
+      }
+    }
+
     try {
       // 1. Update Database & Log
       await ref.read(firestoreServiceProvider).updateProviderStatus(
          staff.id, 
          newStatus,
          actorId: currentUser?.id,
+         ownerId: residentId, // Pass resident ID or null
       );
       
       // 2. Notify Relevant Parties
