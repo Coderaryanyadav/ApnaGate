@@ -5,6 +5,7 @@ import '../../models/extras.dart';
 import '../../services/notification_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/society_config_service.dart'; // Added
 import '../resident/staff_attendance_screen.dart';
 
 class StaffEntryScreen extends ConsumerStatefulWidget {
@@ -91,9 +92,9 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
                             const SizedBox(width: 8),
                             SizedBox(
                               width: 100,
-                              child: ElevatedButton(
-                                onPressed: () => _toggleStatus(staff),
-                                style: ElevatedButton.styleFrom(
+                                child: ElevatedButton(
+                                  onPressed: () => staff.status == 'in' ? _toggleStatus(staff) : _showCheckInDialog(staff),
+                                  style: ElevatedButton.styleFrom(
                                   backgroundColor: isIn ? Colors.red : Colors.green,
                                   foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -116,47 +117,129 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
     );
   }
 
-  Future<void> _toggleStatus(ServiceProvider staff) async {
+  Future<void> _toggleStatus(ServiceProvider staff, {String? wing, String? flat}) async {
     // 📳 Haptic Feedback
     // ignore: deprecated_member_use, unawaited_futures
     HapticFeedback.mediumImpact();
     
     final newStatus = staff.status == 'in' ? 'out' : 'in';
-    
-    // Get Current User (Guard) for logging
     final currentUser = ref.read(authServiceProvider).currentUser;
-    
-    // 1. Update Database & Log
-    await ref.read(firestoreServiceProvider).updateProviderStatus(
-       staff.id, 
-       newStatus,
-       actorId: currentUser?.id, // Log who did it
-    );
-    
-    // 2. Notify Admin
+
     try {
-        final action = newStatus == 'in' ? 'Checked In' : 'Checked Out';
-        final message = '${staff.name} ($action) - ${staff.category}';
-        
-        await ref.read(notificationServiceProvider).notifyByTag(
-          tagKey: 'role', 
-          tagValue: 'admin', 
-          title: 'Staff Update', 
-          message: message,
-          data: {'type': 'staff_update', 'staff_id': staff.id, 'status': newStatus}
-        );
-    } catch (e) {
-        debugPrint('Failed to notify admin: $e');
-    }
-    
-    // Force refresh UI (Works even if Realtime is off)
-    // ignore: unused_result
-    ref.refresh(firestoreServiceProvider);
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${staff.name} Marked ${newStatus.toUpperCase()}')),
+      // 1. Update Database & Log
+      await ref.read(firestoreServiceProvider).updateProviderStatus(
+         staff.id, 
+         newStatus,
+         actorId: currentUser?.id,
       );
+      
+      // 2. Notify Relevant Parties
+      if (newStatus == 'in' && wing != null && flat != null && flat.isNotEmpty) {
+        // 🔔 Notify Specific Resident (Daily Help Logic)
+        await ref.read(notificationServiceProvider).notifyFlat(
+          wing: wing,
+          flatNumber: flat,
+          title: 'Staff Arrived',
+          message: '${staff.name} (${staff.category}) has arrived.',
+          // data: {'type': 'staff_entry', 'staff_id': staff.id} // Optional data types
+        );
+      } else {
+        // 🔔 Notify Admin (Default/General Staff)
+        // Only if not notifying resident? Or both? Usually if resident notified, admin doesn't need spam.
+        // But let's keep Admin updated for general security monitoring if desired.
+        // However, Daily Help entry is private. I'll skip Admin notification if Resident is notified.
+        if (wing == null) {
+           final action = newStatus == 'in' ? 'Checked In' : 'Checked Out';
+           await ref.read(notificationServiceProvider).notifyByTag(
+             tagKey: 'role', 
+             tagValue: 'admin', 
+             title: 'Staff Update', 
+             message: '${staff.name} ($action) - ${staff.category}',
+           );
+        }
+      }
+
+      // Force refresh
+      // ignore: unused_result
+      ref.refresh(firestoreServiceProvider);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${staff.name} Marked ${newStatus.toUpperCase()} ${wing != null ? "for $wing-$flat" : ""}'),
+            backgroundColor: newStatus == 'in' ? Colors.green : Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }
+  }
+
+  void _showCheckInDialog(ServiceProvider staff) {
+    String? selectedWing;
+    final flatCtrl = TextEditingController(); // Dispose? Ideally yes, but in dialog it's fleeting.
+
+    showDialog(
+      context: context,
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          final config = ref.watch(societyConfigProvider);
+          return AlertDialog(
+            backgroundColor: Colors.grey[900],
+            title: Text('Check In: ${staff.name}', style: const TextStyle(color: Colors.white)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Is this staff visiting a specific flat?', style: TextStyle(color: Colors.white70)),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  dropdownColor: Colors.grey[850],
+                  style: const TextStyle(color: Colors.white),
+                  items: config.wings.map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
+                  onChanged: (v) => selectedWing = v,
+                  decoration: const InputDecoration(
+                    labelText: 'Wing (Optional)',
+                    labelStyle: TextStyle(color: Colors.white70),
+                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                    focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.blueAccent)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: flatCtrl,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Flat Number (Optional)',
+                    labelStyle: TextStyle(color: Colors.white70),
+                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                    focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.blueAccent)),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _toggleStatus(staff); // No data = General
+                },
+                child: const Text('General Entry', style: TextStyle(color: Colors.white54)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
+                onPressed: () {
+                  Navigator.pop(context);
+                  _toggleStatus(staff, wing: selectedWing, flat: flatCtrl.text.trim());
+                },
+                child: const Text('Notify Resident'),
+              ),
+            ],
+          );
+        }
+      ),
+    );
   }
 }

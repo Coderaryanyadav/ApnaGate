@@ -74,13 +74,13 @@ class SocietyConfigNotifier extends StateNotifier<SocietyConfig> {
 
     try {
       if (wings != null) {
-        await supabase.from('society_config').upsert({'key': 'wings', 'value': wings});
+        await supabase.from('society_config').upsert({'key': 'wings', 'value': wings}, onConflict: 'key');
       }
       if (floors != null) {
-        await supabase.from('society_config').upsert({'key': 'floors', 'value': floors});
+        await supabase.from('society_config').upsert({'key': 'floors', 'value': floors}, onConflict: 'key');
       }
       if (flatsPerFloor != null) {
-        await supabase.from('society_config').upsert({'key': 'flats_per_floor', 'value': flatsPerFloor});
+        await supabase.from('society_config').upsert({'key': 'flats_per_floor', 'value': flatsPerFloor}, onConflict: 'key');
       }
     } catch (e) {
       debugPrint('Config Update Error: $e');
