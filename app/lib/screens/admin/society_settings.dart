@@ -243,7 +243,8 @@ class _SocietySettingsScreenState extends ConsumerState<SocietySettingsScreen> {
               ),
             ],
           ),
-        ),
+        ), 
+      ),
       ),
     );
   }
