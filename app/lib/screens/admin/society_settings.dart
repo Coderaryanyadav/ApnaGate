@@ -23,7 +23,7 @@ class _SocietySettingsScreenState extends ConsumerState<SocietySettingsScreen> {
     _flatsController.text = config.flatsPerFloor.toString();
   }
 
-  void _addWing() {
+  Future<void> _addWing() async {
     if (_wingController.text.isNotEmpty) {
       final currentWings = List<String>.from(ref.read(societyConfigProvider).wings);
       final newWing = _wingController.text.toUpperCase().trim();
@@ -31,33 +31,45 @@ class _SocietySettingsScreenState extends ConsumerState<SocietySettingsScreen> {
       if (!currentWings.contains(newWing)) {
         currentWings.add(newWing);
         currentWings.sort();
-        ref.read(societyConfigProvider.notifier).updateConfig(wings: currentWings);
-        _wingController.clear();
-        HapticHelper.mediumImpact();
+        try {
+          await ref.read(societyConfigProvider.notifier).updateConfig(wings: currentWings);
+          _wingController.clear();
+          HapticHelper.mediumImpact();
+        } catch (e) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Error: $e'), backgroundColor: Colors.red));
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wing already exists')));
       }
     }
   }
 
-  void _removeWing(String wing) {
+  Future<void> _removeWing(String wing) async {
     final currentWings = List<String>.from(ref.read(societyConfigProvider).wings);
     currentWings.remove(wing);
-    ref.read(societyConfigProvider.notifier).updateConfig(wings: currentWings);
-    HapticHelper.mediumImpact();
+    try {
+      await ref.read(societyConfigProvider.notifier).updateConfig(wings: currentWings);
+      HapticHelper.mediumImpact();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Error: $e'), backgroundColor: Colors.red));
+    }
   }
 
-  void _saveStructure() {
+  Future<void> _saveStructure() async {
     final floors = int.tryParse(_floorsController.text);
     final flats = int.tryParse(_flatsController.text);
 
     if (floors != null && flats != null) {
-      ref.read(societyConfigProvider.notifier).updateConfig(
-        floors: floors,
-        flatsPerFloor: flats,
-      );
-      HapticHelper.mediumImpact();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Structure Updated!')));
+      try {
+        await ref.read(societyConfigProvider.notifier).updateConfig(
+          floors: floors,
+          flatsPerFloor: flats,
+        );
+        HapticHelper.mediumImpact();
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Structure Updated!')));
+      } catch (e) {
+         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Error: $e'), backgroundColor: Colors.red));
+      }
     }
   }
 
@@ -66,107 +78,214 @@ class _SocietySettingsScreenState extends ConsumerState<SocietySettingsScreen> {
     final config = ref.watch(societyConfigProvider);
 
     return Scaffold(
+      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         title: const Text('Society Settings'),
         backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        titleTextStyle: const TextStyle(
+          color: Colors.white,
+          fontSize: 22,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1,
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 🏢 building Structure
-            _buildSectionHeader('🏢 Building Structure'),
-            Card(
-              color: Theme.of(context).cardTheme.color,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
+      extendBodyBehindAppBar: true,
+      body: SizedBox.expand(
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+               begin: Alignment.topLeft,
+               end: Alignment.bottomRight,
+               colors: [Color(0xFF000000), Color(0xFF1A1A1A)],
+            ),
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 100), // Top padding for AppBar
+            child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 🏢 building Structure Section
+              _buildSectionHeader('🏢 Building Structure'),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black, blurRadius: 20, offset: const Offset(0, 10)),
+                  ],
+                ),
+                padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
                     Row(
                       children: [
                         Expanded(
-                          child: TextFormField(
-                            controller: _floorsController,
-                            decoration: const InputDecoration(labelText: 'Total Floors', prefixIcon: Icon(Icons.apartment)),
-                            keyboardType: TextInputType.number,
+                          child: _buildGlassTextField(
+                             controller: _floorsController,
+                             label: 'Total Floors',
+                             icon: Icons.apartment,
+                             isNumber: true
                           ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
-                          child: TextFormField(
-                            controller: _flatsController,
-                            decoration: const InputDecoration(labelText: 'Flats per Floor', prefixIcon: Icon(Icons.grid_view)),
-                            keyboardType: TextInputType.number,
+                          child: _buildGlassTextField(
+                             controller: _flatsController,
+                             label: 'Flats/Floor',
+                             icon: Icons.grid_view,
+                             isNumber: true
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.indigoAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          elevation: 8,
+                          shadowColor: Colors.indigoAccent.withValues(alpha: 0.4),
+                        ),
                         onPressed: _saveStructure,
-                        icon: const Icon(Icons.save),
-                        label: const Text('Save Structure'),
+                        icon: const Icon(Icons.save_rounded),
+                        label: const Text('Save Structure', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
 
-            const SizedBox(height: 24),
-            
-            // 🏙️ Wings Configuration
-            _buildSectionHeader('🏙️ Manage Wings'),
-            Card(
-              color: Theme.of(context).cardTheme.color,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
+              const SizedBox(height: 32),
+              
+              // 🏙️ Wings Configuration Section
+              _buildSectionHeader('🏙️ Manage Wings'),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black, blurRadius: 20, offset: const Offset(0, 10)),
+                  ],
+                ),
+                padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
                     Row(
                       children: [
                         Expanded(
-                          child: TextFormField(
-                            controller: _wingController,
-                            decoration: const InputDecoration(
-                              labelText: 'Add New Wing (e.g., C)', 
-                              hintText: 'Enter Wing Name',
-                              prefixIcon: Icon(Icons.add_location_alt)
-                            ),
+                          child: _buildGlassTextField(
+                            controller: _wingController, 
+                            label: 'Wing Name (e.g. C)', 
+                            icon: Icons.add_location_alt,
+                            hint: 'Name',
                           ),
                         ),
                         const SizedBox(width: 12),
-                        IconButton(
-                          onPressed: _addWing, 
-                          icon: const Icon(Icons.add_circle, size: 32, color: Colors.indigoAccent),
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(colors: [Colors.blueAccent, Colors.purpleAccent]),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(color: Colors.blueAccent.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))
+                            ],
+                          ),
+                          child: IconButton(
+                            onPressed: _addWing, 
+                            icon: const Icon(Icons.add, size: 28, color: Colors.white),
+                            style: IconButton.styleFrom(
+                              padding: const EdgeInsets.all(12),
+                            ),
+                          ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 24),
+                    const Divider(color: Colors.white10),
                     const SizedBox(height: 16),
-                    const Divider(),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: config.wings.map((wing) {
-                        return Chip(
-                          label: Text('Wing $wing', style: const TextStyle(fontWeight: FontWeight.bold)),
-                          backgroundColor: Colors.indigo.withValues(alpha: 0.2),
-                          deleteIcon: const Icon(Icons.cancel, size: 18),
-                          onDeleted: () => _removeWing(wing),
-                        );
-                      }).toList(),
-                    ),
+                    config.wings.isEmpty 
+                      ? const Center(child: Text('No wings added yet.', style: TextStyle(color: Colors.white38)))
+                      : Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: config.wings.map((wing) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.indigo.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.indigoAccent.withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('Wing $wing', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () => _removeWing(wing),
+                                    child: const Icon(Icons.cancel, size: 18, color: Colors.white70),
+                                  )
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildGlassTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool isNumber = false,
+    String? hint,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+          keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(color: Colors.white24),
+            prefixIcon: Icon(icon, color: Colors.white70),
+            filled: true,
+            fillColor: Colors.black.withValues(alpha: 0.3),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.indigoAccent),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

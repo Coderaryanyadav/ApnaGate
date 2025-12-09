@@ -84,7 +84,8 @@ class SocietyConfigNotifier extends StateNotifier<SocietyConfig> {
       }
     } catch (e) {
       debugPrint('Config Update Error: $e');
-      await loadConfig(); // Revert on failure
+      await loadConfig(); // Revert
+      rethrow; // 🚨 Allow UI to handle it
     }
   }
 }
