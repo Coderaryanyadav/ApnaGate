@@ -112,9 +112,9 @@ class NotificationService {
       };
 
       if (!isSilent) {
-        // Removed android_channel_id - using OneSignal default
         body['ios_sound'] = 'notification.wav';
         body['android_sound'] = 'notification';
+        body['android_channel_id'] = 'high_importance_channel_v2'; // Restored for SOS
         body['content_available'] = true;
         body['mutable_content'] = true;
       }
