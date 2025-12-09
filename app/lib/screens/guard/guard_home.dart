@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'; 
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
-import 'add_visitor.dart';
-import 'visitor_status.dart';
-import 'scan_pass.dart';
-import '../resident/notice_list.dart';
-import '../resident/service_directory.dart';
-import 'staff_entry.dart';
+import '../../utils/app_routes.dart';
+import '../../utils/app_constants.dart';
 
 class GuardHome extends ConsumerStatefulWidget {
   const GuardHome({super.key});
@@ -17,24 +17,93 @@ class GuardHome extends ConsumerStatefulWidget {
 }
 
 class _GuardHomeState extends ConsumerState<GuardHome> {
+
+  Timer? _refreshTimer;
+  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
   final Set<String> _handledAlerts = {};
   bool _isAlertShowing = false;
+  static bool _hasSetupOneSignal = false;
+  late Stream<List<Map<String, dynamic>>> _sosStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _sosStream = ref.read(firestoreServiceProvider).getActiveSOS();
+    
+    // 1. OneSignal Setup (Critical for SOS)
+    if (!_hasSetupOneSignal) {
+      _hasSetupOneSignal = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _setupOneSignal());
+    }
+
+    // 2. Global Auto-Refresh (10s)
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) setState(() {}); 
+    });
+
+    // Init Local Notifications
+    _initLocalNotifications(); 
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null; // Clear reference
+    super.dispose();
+  }
+
+  void _initLocalNotifications() async { // Added
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    final darwinSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+    final initSettings = InitializationSettings(android: androidSettings, iOS: darwinSettings);
+    await _localNotifications.initialize(initSettings);
+  }
+
+  void _triggerLocalSOS(Map<String, dynamic> alert) async { // Added
+    const androidDetails = AndroidNotificationDetails(
+      'crescent_gate_alarm_v2', 
+      'Critical Alerts',
+      importance: Importance.max,
+      priority: Priority.max,
+      playSound: true,
+      sound: RawResourceAndroidNotificationSound('notification'),
+    );
+    const details = NotificationDetails(android: androidDetails);
+    
+    await _localNotifications.show(
+      999, // Fixed ID for SOS
+      '🚨 SOS ALERT!', 
+      'Emergency at ${alert['wing'] ?? 'Unknown'}-${alert['flat_number'] ?? alert['flatNumber'] ?? 'Unknown'}', 
+      details,
+    );
+  }
+
+  void _setupOneSignal() {
+    final user = ref.read(authServiceProvider).currentUser;
+    if (user == null) return;
+    OneSignal.login(user.id);
+    OneSignal.User.addTagWithKey('role', 'guard');
+  }
 
   @override
   Widget build(BuildContext context) {
-    // 🚨 Listen for SOS Alerts
-    final sosStream = ref.watch(firestoreServiceProvider).getActiveSOS();
-    
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: sosStream,
+      stream: _sosStream,
       builder: (context, snapshot) {
         if (snapshot.hasData && snapshot.data!.isNotEmpty) {
            final newAlerts = snapshot.data!.where((a) => !_handledAlerts.contains(a['id'])).toList();
-           if (newAlerts.isNotEmpty && !_isAlertShowing) {
+           if (newAlerts.isNotEmpty && !_isAlertShowing) { // Only show if not handled
              final alert = newAlerts.first;
              _handledAlerts.add(alert['id']);
+             // 🚀 TRIGGER LOCAL NOTIFICATION (Backup)
+             _triggerLocalSOS(alert);
+             
              WidgetsBinding.instance.addPostFrameCallback((_) {
-               _showSOSDialog(alert);
+               if (mounted) _showSOSDialog(alert);
              });
            }
         }
@@ -47,7 +116,7 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
             flexibleSpace: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.black.withOpacity(0.8), Colors.transparent],
+                  colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                 ),
@@ -78,17 +147,17 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
                 padding: EdgeInsets.zero,
                 children: [
                   _buildGlassCard(context, 'Add Visitor', Icons.person_add, Colors.blueAccent, 
-                    () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddVisitorScreen()))),
+                    () => Navigator.pushNamed(context, AppRoutes.addVisitor)),
                   _buildGlassCard(context, 'Visitor Logs', Icons.history, Colors.orangeAccent, 
-                    () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VisitorStatusScreen()))),
-                  _buildGlassCard(context, 'Scan Pass', Icons.qr_code_scanner, Colors.greenAccent, 
-                    () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanPassScreen()))),
+                    () => Navigator.pushNamed(context, AppRoutes.visitorStatus)),
+                  _buildGlassCard(context, 'Scan', Icons.qr_code_scanner, Colors.greenAccent, 
+                    () => Navigator.pushNamed(context, AppRoutes.scanPass)),
                   _buildGlassCard(context, 'Notices', Icons.announcement, Colors.purpleAccent, 
-                    () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NoticeListScreen()))),
+                    () => Navigator.pushNamed(context, AppRoutes.notices)),
                   _buildGlassCard(context, 'Directory', Icons.contact_phone, Colors.cyanAccent, 
-                    () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ServiceDirectoryScreen()))),
+                    () => Navigator.pushNamed(context, AppRoutes.serviceDirectory)),
                   _buildGlassCard(context, 'Daily Staff', Icons.badge, Colors.tealAccent, 
-                    () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StaffEntryScreen()))),
+                    () => Navigator.pushNamed(context, AppRoutes.staffEntry)),
                 ],
               ),
             ),
@@ -113,23 +182,27 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
         title: const Row(
           children: [
             Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 32),
-            SizedBox(width: 8),
+            SizedBox(width: AppConstants.spacing8),
             Text('SOS ALERT', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 24))
           ]
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('EMERGENCY REPORTED', style: TextStyle(color: Colors.white, fontSize: 18, letterSpacing: 1)),
-            const Divider(color: Colors.redAccent),
-            const SizedBox(height: 12),
-            Text('FLAT: ${alert['flatNumber']}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 4),
-            Text('WING: ${alert['wing'] ?? 'Unknown'}', style: const TextStyle(color: Colors.white70, fontSize: 20)),
-            const SizedBox(height: 16),
-            const Text('Action Required Immediately.', style: TextStyle(color: Colors.redAccent, fontStyle: FontStyle.italic)),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('EMERGENCY REPORTED', style: TextStyle(color: Colors.white, fontSize: 18, letterSpacing: 1)),
+              const Divider(color: Colors.redAccent),
+              const SizedBox(height: AppConstants.spacing12),
+              Text('WING: ${alert['wing'] ?? 'Unknown'}', style: const TextStyle(color: Colors.white70, fontSize: 20)),
+              Text('FLAT: ${alert['flat_number'] ?? alert['flatNumber'] ?? 'Unknown'}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900)),
+              const SizedBox(height: AppConstants.spacing4),
+              // Resident name might not be in payload if not sent, check notification service
+              Text('Resident: ${alert['resident_name'] ?? alert['residentName'] ?? 'Unknown'}', style: const TextStyle(color: Colors.white54, fontSize: 16)),
+              const SizedBox(height: AppConstants.spacing16),
+              const Text('Action Required Immediately.', style: TextStyle(color: Colors.redAccent, fontStyle: FontStyle.italic)),
+            ],
+          ),
         ),
         actions: [
           SizedBox(
@@ -142,8 +215,17 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               onPressed: () async {
-                Navigator.pop(context);
-                setState(() => _isAlertShowing = false);
+                // 1. Resolve in DB
+                await ref.read(firestoreServiceProvider).resolveSOS(alert['id']);
+
+                // 2. Play Haptic
+                // ignore: deprecated_member_use, unawaited_futures
+                HapticFeedback.heavyImpact();
+
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  setState(() => _isAlertShowing = false);
+                }
               },
               child: const Text('ACKNOWLEDGE & RESPOND', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
@@ -158,14 +240,14 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: LinearGradient(
-          colors: [Colors.white.withOpacity(0.05), Colors.white.withOpacity(0.01)],
+          colors: [Colors.white.withValues(alpha: 0.05), Colors.white.withValues(alpha: 0.01)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             blurRadius: 20,
             offset: const Offset(0, 10),
             spreadRadius: -5,
@@ -184,14 +266,14 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   boxShadow: [
-                    BoxShadow(color: color.withOpacity(0.2), blurRadius: 15, spreadRadius: 2),
+                    BoxShadow(color: color.withValues(alpha: 0.2), blurRadius: 15, spreadRadius: 2),
                   ],
                 ),
                 child: Icon(icon, size: 36, color: color),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppConstants.spacing16),
               Text(
                 title,
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70),

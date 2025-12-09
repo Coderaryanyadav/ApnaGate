@@ -3,6 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user.dart';
+import '../../utils/input_validator.dart';
+import '../../utils/app_constants.dart';
+import '../../widgets/loading_widgets.dart';
+import '../../utils/haptic_helper.dart';
 
 class AddUserDialog extends ConsumerStatefulWidget {
   final String initialRole;
@@ -34,10 +38,10 @@ class _AddUserDialogState extends ConsumerState<AddUserDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Name')),
-            TextField(controller: _phoneController, decoration: const InputDecoration(labelText: 'Phone'), keyboardType: TextInputType.phone),
-            TextField(controller: _emailController, decoration: const InputDecoration(labelText: 'Email'), keyboardType: TextInputType.emailAddress),
-            TextField(controller: _passwordController, decoration: const InputDecoration(labelText: 'Password'), obscureText: true),
+            TextFormField(controller: _nameController, decoration: const InputDecoration(labelText: 'Name'), validator: InputValidator.validateName),
+            TextFormField(controller: _phoneController, decoration: const InputDecoration(labelText: 'Phone'), keyboardType: TextInputType.phone, validator: InputValidator.validatePhone),
+            TextFormField(controller: _emailController, decoration: const InputDecoration(labelText: 'Email'), keyboardType: TextInputType.emailAddress, validator: InputValidator.validateEmail),
+            TextFormField(controller: _passwordController, decoration: const InputDecoration(labelText: 'Password'), obscureText: true, validator: InputValidator.validatePassword),
             
             if (widget.initialRole == 'resident') ...[
               const SizedBox(height: 16),
@@ -45,15 +49,17 @@ class _AddUserDialogState extends ConsumerState<AddUserDialog> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      // ignore: deprecated_member_use
                       value: _selectedWing,
                       decoration: const InputDecoration(labelText: 'Wing'),
-                      items: ['A', 'B'].map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
+                      items: AppConstants.wings.map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
                       onChanged: (v) => setState(() => _selectedWing = v),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      // ignore: deprecated_member_use
                       value: _selectedFloor,
                       decoration: const InputDecoration(labelText: 'Floor'),
                       items: List.generate(12, (i) => (i + 1).toString())
@@ -68,6 +74,7 @@ class _AddUserDialogState extends ConsumerState<AddUserDialog> {
               ),
               if (_selectedFloor != null)
                 DropdownButtonFormField<String>(
+                  // ignore: deprecated_member_use
                   value: _selectedFlat,
                   decoration: const InputDecoration(labelText: 'Flat'),
                   items: List.generate(4, (i) {
@@ -78,11 +85,12 @@ class _AddUserDialogState extends ConsumerState<AddUserDialog> {
                 ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
+                // ignore: deprecated_member_use
                 value: _userType,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: const [
                   DropdownMenuItem(value: 'owner', child: Text('Owner')),
-                  DropdownMenuItem(value: 'renter', child: Text('Renter')),
+                  DropdownMenuItem(value: 'tenant', child: Text('Tenant')),
                 ],
                 onChanged: (v) => setState(() => _userType = v!),
               ),
@@ -96,9 +104,11 @@ class _AddUserDialogState extends ConsumerState<AddUserDialog> {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        ElevatedButton(
-          onPressed: _isLoading ? null : _submit,
-          child: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Create'),
+        LoadingButton(
+          label: 'Create',
+          isLoading: _isLoading,
+          onPressed: _submit,
+          icon: Icons.person_add,
         ),
       ],
     );
@@ -117,8 +127,9 @@ class _AddUserDialogState extends ConsumerState<AddUserDialog> {
       final firestoreService = ref.read(firestoreServiceProvider);
 
       // Create auth user (Admin-safe: Uses secondary app)
-      final uid = await authService.createUser(_emailController.text, _passwordController.text);
-      if (uid == null) throw Exception('Failed to create user');
+      // Create auth user (Admin-safe: Uses secondary app)
+      final newUserId = await authService.createUser(_emailController.text, _passwordController.text);
+      if (newUserId == null) throw Exception('Failed to create user');
 
       List<String>? members;
       if (_membersController.text.isNotEmpty) {
@@ -126,7 +137,8 @@ class _AddUserDialogState extends ConsumerState<AddUserDialog> {
       }
 
       await firestoreService.createUser(AppUser(
-        uid: uid,
+        id: newUserId,
+        email: _emailController.text, // Pass email
         name: _nameController.text,
         phone: _phoneController.text,
         flatNumber: widget.initialRole == 'resident' ? _selectedFlat : null,
@@ -139,11 +151,13 @@ class _AddUserDialogState extends ConsumerState<AddUserDialog> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User Created!')));
+        HapticHelper.mediumImpact();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ User Created!'), backgroundColor: Colors.green));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        HapticHelper.heavyImpact();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Error: $e'), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

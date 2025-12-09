@@ -7,7 +7,6 @@ import 'screens/resident/resident_home.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'services/auth_service.dart';
 import 'services/firestore_service.dart';
-import 'services/notification_service.dart';
 
 class AuthWrapper extends ConsumerWidget {
   const AuthWrapper({super.key});
@@ -26,7 +25,7 @@ class AuthWrapper extends ConsumerWidget {
 
         // Fetch user role
         return FutureBuilder<AppUser?>(
-          future: ref.watch(firestoreServiceProvider).getUser(user.uid),
+          future: ref.watch(firestoreServiceProvider).getUser(user.id),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -36,11 +35,6 @@ class AuthWrapper extends ConsumerWidget {
             if (appUser == null) {
               return const LoginScreen();
             }
-
-            // Initialize Notifications with Role
-            Future.microtask(() {
-              ref.read(notificationServiceProvider).initialize(user.uid, appUser.role);
-            });
 
             switch (appUser.role) {
               case 'guard':
@@ -55,7 +49,11 @@ class AuthWrapper extends ConsumerWidget {
         );
       },
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (e, trace) => Scaffold(body: Center(child: Text('Error: $e'))),
+      error: (e, trace) {
+        // If session is invalid/corrupted, just show Login Screen
+        debugPrint('⚠️ Auth Error in Wrapper: $e. Redirecting to Login.');
+        return const LoginScreen(); 
+      },
     );
   }
 }

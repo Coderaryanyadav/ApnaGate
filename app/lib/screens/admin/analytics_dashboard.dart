@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../../services/firestore_service.dart';
 
 class AnalyticsDashboard extends ConsumerWidget {
   const AnalyticsDashboard({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Force dark chart colors
-    final isDark = true; 
-    
+    final firestoreService = ref.watch(firestoreServiceProvider);
+
     return Scaffold(
       appBar: AppBar(title: const Text('📊 Analytics')),
       body: SingleChildScrollView(
@@ -17,92 +17,138 @@ class AnalyticsDashboard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // User Stats Cards
+            FutureBuilder<Map<String, int>>(
+              future: firestoreService.getUserCountsByRole(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final counts = snapshot.data!;
+                return Row(
+                  children: [
+                    Expanded(child: _buildStatCard('Admins', counts['admin'] ?? 0, Colors.red)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _buildStatCard('Guards', counts['guard'] ?? 0, Colors.blue)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _buildStatCard('Residents', counts['resident'] ?? 0, Colors.green)),
+                  ],
+                );
+              },
+            ),
+
+            const SizedBox(height: 24),
             const Text('📈 Visitor Trends (Last 7 Days)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            
-            // 📊 Bar Chart
-            Container(
-              height: 300,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardTheme.color,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-                ],
-              ),
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
-                  maxY: 60,
-                  gridData: const FlGridData(show: false),
-                  barTouchData: BarTouchData(enabled: true),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (value, meta) {
-                          const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-                          if (value.toInt() >= 0 && value.toInt() < days.length) {
-                             return Padding(
-                               padding: const EdgeInsets.only(top: 8),
-                               child: Text(days[value.toInt()], style: const TextStyle(fontSize: 12, color: Colors.white70)),
-                             );
-                          }
-                          return const SizedBox();
-                        },
+
+            // Bar Chart - Real Data
+            FutureBuilder<List<Map<String, dynamic>>>(
+              future: firestoreService.getDailyVisitorCounts(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const SizedBox(height: 300, child: Center(child: CircularProgressIndicator()));
+                }
+
+                final dailyData = snapshot.data!;
+                return Container(
+                  height: 300,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardTheme.color,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: BarChart(
+                    BarChartData(
+                      alignment: BarChartAlignment.spaceAround,
+                      maxY: _getMaxY(dailyData),
+                      gridData: const FlGridData(show: false),
+                      titlesData: FlTitlesData(
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            getTitlesWidget: (value, meta) {
+                              if (value.toInt() >= 0 && value.toInt() < dailyData.length) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    dailyData[value.toInt()]['dayName'],
+                                    style: const TextStyle(fontSize: 12, color: Colors.white70),
+                                  ),
+                                );
+                              }
+                              return const SizedBox();
+                            },
+                          ),
+                        ),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 30,
+                            getTitlesWidget: (val, meta) => Text(
+                              val.toInt().toString(),
+                              style: const TextStyle(color: Colors.white54, fontSize: 10),
+                            ),
+                          ),
+                        ),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      barGroups: List.generate(
+                        dailyData.length,
+                        (index) => BarChartGroupData(
+                          x: index,
+                          barRods: [
+                            BarChartRodData(
+                              toY: dailyData[index]['count'].toDouble(),
+                              color: Colors.white,
+                              width: 20,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 30, getTitlesWidget: (val, meta) => Text(val.toInt().toString(), style: const TextStyle(color: Colors.white54, fontSize: 10)))),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
-                  borderData: FlBorderData(show: false),
-                  barGroups: _getDemoData(),
-                ),
-              ),
+                );
+              },
             ),
 
             const SizedBox(height: 32),
-            const Text('🥧 Visitor Types', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('🥧 Visitor Status Distribution', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
 
-            // 🥧 Pie Chart
-            Container(
-              height: 200,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardTheme.color,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-                ],
-              ),
-              child: PieChart(
-                PieChartData(
-                  sectionsSpace: 2,
-                  centerSpaceRadius: 40,
-                  sections: [
-                    PieChartSectionData(value: 40, title: '40%', color: Colors.orange, radius: 50, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    PieChartSectionData(value: 30, title: '30%', color: Colors.blue, radius: 50, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    PieChartSectionData(value: 20, title: '20%', color: Colors.yellow, radius: 50, titleStyle: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                    PieChartSectionData(value: 10, title: '10%', color: Colors.purple, radius: 50, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-            ),
-            
-            // Legend
-            const SizedBox(height: 16),
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                 _ChartLegend(color: Colors.orange, label: 'Delivery'),
-                 _ChartLegend(color: Colors.blue, label: 'Guest'),
-                 _ChartLegend(color: Colors.yellow, label: 'Cab'),
-                 _ChartLegend(color: Colors.purple, label: 'Other'),
-              ],
+            // Pie Chart - Real Data
+            FutureBuilder<Map<String, int>>(
+              future: firestoreService.getVisitorCountsByStatus(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()));
+                }
+
+                final statusCounts = snapshot.data!;
+                final total = statusCounts.values.fold(0, (sum, count) => sum + count);
+
+                if (total == 0) {
+                  return const Center(child: Text('No visitor data yet'));
+                }
+
+                return Container(
+                  height: 200,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardTheme.color,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: PieChart(
+                    PieChartData(
+                      sectionsSpace: 2,
+                      centerSpaceRadius: 40,
+                      sections: _buildPieSections(statusCounts, total),
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -110,41 +156,44 @@ class AnalyticsDashboard extends ConsumerWidget {
     );
   }
 
-  List<BarChartGroupData> _getDemoData() {
-    return List.generate(7, (index) {
-      return BarChartGroupData(
-        x: index,
-        barRods: [
-          BarChartRodData(
-            toY: (index + 1) * 5.0 + (index % 3) * 10,
-            color: Colors.indigo,
-            width: 16,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        ],
-      );
-    });
-  }
-}
-
-class _ChartLegend extends StatelessWidget {
-  final Color color;
-  final String label;
-
-  const _ChartLegend({required this.color, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+  Widget _buildStatCard(String label, int count, Color color) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(count.toString(), style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
+            const SizedBox(height: 4),
+            Text(label, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+          ],
         ),
-        const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-      ],
+      ),
     );
+  }
+
+  double _getMaxY(List<Map<String, dynamic>> data) {
+    if (data.isEmpty) return 10;
+    final max = data.map((d) => d['count'] as int).reduce((a, b) => a > b ? a : b);
+    return (max + 5).toDouble();
+  }
+
+  List<PieChartSectionData> _buildPieSections(Map<String, int> statusCounts, int total) {
+    final colors = {
+      'pending': Colors.orange,
+      'approved': Colors.blue,
+      'inside': Colors.green,
+      'exited': Colors.grey,
+    };
+
+    return statusCounts.entries.map((entry) {
+      final percentage = ((entry.value / total) * 100).toInt();
+      return PieChartSectionData(
+        value: entry.value.toDouble(),
+        title: '$percentage%',
+        color: colors[entry.key] ?? Colors.purple,
+        radius: 50,
+        titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+      );
+    }).toList();
   }
 }

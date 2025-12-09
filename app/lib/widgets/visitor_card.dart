@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:photo_view/photo_view.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/visitor_request.dart';
 
@@ -9,6 +11,7 @@ class VisitorCard extends StatelessWidget {
   final VisitorRequest request;
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
+  final VoidCallback? onExit;
   final bool showActions;
 
   const VisitorCard({
@@ -16,6 +19,7 @@ class VisitorCard extends StatelessWidget {
     required this.request,
     this.onApprove,
     this.onReject,
+    this.onExit,
     this.showActions = false,
   });
 
@@ -31,8 +35,9 @@ class VisitorCard extends StatelessWidget {
     IconData typeIcon = Icons.build;
     
     // Strip Emojis
-    String cleanPurpose = request.purpose.replaceAll(RegExp(r'[^\x00-\x7F]+'), '').trim().toUpperCase();
-    if (cleanPurpose.isEmpty) cleanPurpose = "VISITOR";
+    // Show full details - no masking
+    String cleanPurpose = request.purpose.trim().toUpperCase();
+    if (cleanPurpose.isEmpty) cleanPurpose = 'VISITOR';
 
     if (isDelivery) { accentColor = Colors.orangeAccent; typeIcon = Icons.local_shipping; }
     else if (isGuest) { accentColor = Colors.cyanAccent; typeIcon = Icons.people; }
@@ -45,21 +50,21 @@ class VisitorCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: accentColor.withOpacity(0.15),
+            color: accentColor.withValues(alpha: 0.15),
             blurRadius: 20,
             offset: const Offset(0, 8),
             spreadRadius: -5,
           ),
         ],
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            const Color(0xFF252525),
-            const Color(0xFF000000),
+            Color(0xFF252525),
+            Color(0xFF000000),
           ],
         ),
-        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
@@ -74,9 +79,9 @@ class VisitorCard extends StatelessWidget {
                 height: 100,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: accentColor.withOpacity(0.1),
+                  color: accentColor.withValues(alpha: 0.1),
                   boxShadow: [
-                    BoxShadow(color: accentColor.withOpacity(0.2), blurRadius: 50),
+                    BoxShadow(color: accentColor.withValues(alpha: 0.2), blurRadius: 50),
                   ],
                 ),
               ),
@@ -88,8 +93,8 @@ class VisitorCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
-                    color: Colors.white.withOpacity(0.02),
+                    border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+                    color: Colors.white.withValues(alpha: 0.02),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -97,9 +102,9 @@ class VisitorCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: accentColor.withOpacity(0.2),
+                          color: accentColor.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: accentColor.withOpacity(0.3)),
+                          border: Border.all(color: accentColor.withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           children: [
@@ -114,7 +119,7 @@ class VisitorCard extends StatelessWidget {
                       ),
                       Row(
                         children: [
-                          Icon(Icons.access_time, size: 14, color: Colors.white54),
+                          const Icon(Icons.access_time, size: 14, color: Colors.white54),
                           const SizedBox(width: 4),
                           Text(
                             _formatTime(request.createdAt),
@@ -142,7 +147,7 @@ class VisitorCard extends StatelessWidget {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               gradient: LinearGradient(colors: [accentColor, Colors.purple]),
-                              boxShadow: [BoxShadow(color: accentColor.withOpacity(0.3), blurRadius: 10)],
+                              boxShadow: [BoxShadow(color: accentColor.withValues(alpha: 0.3), blurRadius: 10)],
                             ),
                             padding: const EdgeInsets.all(2), // Border width
                             child: Container(
@@ -166,36 +171,48 @@ class VisitorCard extends StatelessWidget {
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 19, color: Colors.white, letterSpacing: 0.5),
                               maxLines: 1, overflow: TextOverflow.ellipsis,
                             ),
+                            const SizedBox(height: 4),
+                            // 🏠 Flat Number
+                            Row(
+                                children: [
+                                  const Icon(Icons.home, size: 14, color: Colors.indigoAccent),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    request.flatNumber,
+                                    style: TextStyle(color: Colors.indigoAccent.shade100, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                            ),
                             const SizedBox(height: 6),
                              Row(
-                              children: [
-                                Icon(Icons.phone_iphone, size: 14, color: Colors.indigoAccent),
-                                const SizedBox(width: 4),
-                                GestureDetector(
-                                  onTap: () => launchUrl(Uri.parse('tel:${request.visitorPhone}')),
-                                  child: Text(
-                                    request.visitorPhone,
-                                    style: TextStyle(color: Colors.indigoAccent.shade100, fontWeight: FontWeight.w500),
-                                  ),
-                                ),
-                              ],
-                            ),
+                               children: [
+                                 const Icon(Icons.phone_iphone, size: 14, color: Colors.indigoAccent),
+                                 const SizedBox(width: 4),
+                                 GestureDetector(
+                                   onTap: () => launchUrl(Uri.parse('tel:${request.visitorPhone}')),
+                                   child: Text(
+                                     request.visitorPhone,
+                                     style: TextStyle(color: Colors.indigoAccent.shade100, fontWeight: FontWeight.w500),
+                                   ),
+                                 ),
+                               ],
+                             ),
                             const SizedBox(height: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(4),
-                                color: _getStatusColor(request.status).withOpacity(0.1),
-                              ),
-                              child: Text(
-                                request.status.toUpperCase(), 
-                                style: TextStyle(
-                                  color: _getStatusColor(request.status), 
-                                  fontWeight: FontWeight.bold, 
-                                  fontSize: 11,
-                                  letterSpacing: 1,
-                                )
-                              ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(4),
+                                  color: _getStatusColor(request.status).withValues(alpha: 0.1),
+                                ),
+                                child: Text(
+                                  request.status.toUpperCase(), 
+                                  style: TextStyle(
+                                    color: _getStatusColor(request.status), 
+                                    fontWeight: FontWeight.bold, 
+                                    fontSize: 11,
+                                    letterSpacing: 1,
+                                  )
+                                ),
                             ),
                           ],
                         ),
@@ -208,13 +225,13 @@ class VisitorCard extends StatelessWidget {
                 ),
 
                 // ⚡ Actions (Approve/Reject)
-                if (showActions && request.status == 'pending')
+                if (showActions && request.status == 'pending' && onApprove != null && onReject != null)
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: Colors.black26,
                       borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-                      border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+                      border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
                     ),
                     child: Row(
                       children: [
@@ -225,9 +242,9 @@ class VisitorCard extends StatelessWidget {
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               decoration: BoxDecoration(
-                                color: Colors.red.withOpacity(0.1),
+                                color: Colors.red.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.red.withOpacity(0.3)),
+                                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
                               ),
                               child: const Center(
                                 child: Text('REJECT', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, letterSpacing: 1)),
@@ -245,7 +262,7 @@ class VisitorCard extends StatelessWidget {
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(colors: [Colors.green.shade800, Colors.green.shade600]),
                                 borderRadius: BorderRadius.circular(12),
-                                boxShadow: [BoxShadow(color: Colors.green.withOpacity(0.3), blurRadius: 10)],
+                                boxShadow: [BoxShadow(color: Colors.green.withValues(alpha: 0.3), blurRadius: 10)],
                               ),
                               child: const Center(
                                 child: Text('APPROVE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
@@ -256,6 +273,27 @@ class VisitorCard extends StatelessWidget {
                       ],
                     ),
                   ),
+
+                // 🚪 EXIT ACTION
+                if (showActions && onExit != null && (request.status == 'approved' || request.status == 'entered' || request.status == 'inside'))
+                   Container(
+                     padding: const EdgeInsets.all(12),
+                     child: InkWell(
+                       onTap: onExit,
+                       borderRadius: BorderRadius.circular(12),
+                       child: Container(
+                         padding: const EdgeInsets.symmetric(vertical: 12),
+                         decoration: BoxDecoration(
+                           color: Colors.grey.withValues(alpha: 0.2),
+                           borderRadius: BorderRadius.circular(12),
+                           border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                         ),
+                         child: const Center(
+                           child: Text('MARK EXIT', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                         ),
+                       ),
+                     ),
+                   ),
               ],
             ),
           ],
@@ -266,15 +304,29 @@ class VisitorCard extends StatelessWidget {
 
   // --- Helpers ---
 
-  Widget _buildImage(String? base64String) {
-    if (base64String == null || base64String.isEmpty) {
+  Widget _buildImage(String? content) {
+    if (content == null || content.isEmpty) {
       return const Center(child: Icon(Icons.person, color: Colors.white54));
     }
+    
+    if (content.startsWith('http')) {
+       return CachedNetworkImage(
+         imageUrl: content,
+         fit: BoxFit.cover,
+         placeholder: (context, url) => Shimmer.fromColors(
+           baseColor: Colors.grey[800]!,
+           highlightColor: Colors.grey[700]!,
+           child: Container(color: Colors.black),
+         ),
+         errorWidget: (context, url, error) => const Icon(Icons.error),
+       );
+    }
+
     try {
       return Image.memory(
-        base64Decode(base64String),
+        base64Decode(content),
         fit: BoxFit.cover,
-        errorBuilder: (_,__,___) => const Center(child: Icon(Icons.broken_image, color: Colors.white54)),
+        errorBuilder: (_,_,_) => const Center(child: Icon(Icons.broken_image, color: Colors.white54)),
       );
     } catch (e) {
       return const Center(child: Icon(Icons.error, color: Colors.white54));
@@ -283,7 +335,9 @@ class VisitorCard extends StatelessWidget {
 
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
-      case 'approved': return Colors.green;
+      case 'approved': 
+      case 'entered':
+      case 'inside': return Colors.green;
       case 'rejected': return Colors.red;
       case 'exited': return Colors.grey;
       default: return Colors.orange;
@@ -293,8 +347,10 @@ class VisitorCard extends StatelessWidget {
   Widget _buildStatusIcon(String status) {
     IconData icon;
     Color color;
-    switch (status) {
-      case 'approved': icon = Icons.check_circle; color = Colors.green; break;
+    switch (status.toLowerCase()) {
+      case 'approved': 
+      case 'entered':
+      case 'inside': icon = Icons.check_circle; color = Colors.green; break;
       case 'rejected': icon = Icons.cancel; color = Colors.red; break;
       default: icon = Icons.access_time_filled; color = Colors.orange; break;
     }

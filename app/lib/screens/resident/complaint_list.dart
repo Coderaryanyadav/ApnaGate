@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/extras.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
+import '../../services/notification_service.dart';
+import 'complaint_chat.dart';
 
 class ComplaintListScreen extends ConsumerWidget {
   const ComplaintListScreen({super.key});
@@ -15,7 +17,7 @@ class ComplaintListScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('My Complaints')),
       body: StreamBuilder<List<Complaint>>(
-        stream: ref.watch(firestoreServiceProvider).getUserComplaints(user.uid),
+        stream: ref.watch(firestoreServiceProvider).getUserComplaints(user.id),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -47,23 +49,97 @@ class ComplaintListScreen extends ConsumerWidget {
                 elevation: 2,
                 margin: const EdgeInsets.only(bottom: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: _getStatusColor(item.status).withOpacity(0.1),
-                    child: Icon(_getStatusIcon(item.status), color: _getStatusColor(item.status)),
-                  ),
-                  title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(item.description, maxLines: 2, overflow: TextOverflow.ellipsis),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _getStatusColor(item.status).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: _getStatusColor(item.status)),
-                    ),
-                    child: Text(
-                      item.status.toUpperCase().replaceAll('_', ' '),
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _getStatusColor(item.status)),
+                child: InkWell(
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => ComplaintChatScreen(complaint: item)));
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header Row: Icon, Title, Status
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 20,
+                              backgroundColor: _getStatusColor(item.status).withValues(alpha: 0.1),
+                              child: Icon(_getStatusIcon(item.status), color: _getStatusColor(item.status), size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (item.ticketId != null)
+                                    Text(
+                                      item.ticketId!,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  Text(
+                                    item.title,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: _getStatusColor(item.status).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: _getStatusColor(item.status)),
+                              ),
+                              child: Text(
+                                item.status.toUpperCase().replaceAll('_', ' '),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: _getStatusColor(item.status),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // Description
+                        Text(
+                          item.description,
+                          style: const TextStyle(color: Colors.grey, fontSize: 14),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 12),
+                        // Action Button
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => ComplaintChatScreen(complaint: item)),
+                              );
+                            },
+                            icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                            label: const Text('OPEN'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -103,7 +179,7 @@ class ComplaintListScreen extends ConsumerWidget {
     if (user == null) return;
     
     // Fetch user's flat number
-    final appUser = await ref.read(firestoreServiceProvider).getUser(user.uid);
+    final appUser = await ref.read(firestoreServiceProvider).getUser(user.id);
     if (appUser == null || !context.mounted) return;
 
     String selectedCategory = 'Plumbing Issue';
@@ -117,7 +193,7 @@ class ComplaintListScreen extends ConsumerWidget {
     
     String description = '';
 
-    showDialog(
+    await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
@@ -127,6 +203,8 @@ class ComplaintListScreen extends ConsumerWidget {
             children: [
               // Category Dropdown
               DropdownButtonFormField<String>(
+                isExpanded: true, // Fix Overflow
+                // ignore: deprecated_member_use
                 value: selectedCategory,
                 decoration: const InputDecoration(
                   labelText: 'Category',
@@ -134,7 +212,10 @@ class ComplaintListScreen extends ConsumerWidget {
                   border: OutlineInputBorder(),
                 ),
                 items: categories.map((cat) {
-                  return DropdownMenuItem(value: cat, child: Text(cat));
+                  return DropdownMenuItem(
+                    value: cat, 
+                    child: Text(cat, overflow: TextOverflow.ellipsis), // Ensure text truncates if needed
+                  );
                 }).toList(),
                 onChanged: (val) {
                   if (val != null) {
@@ -153,6 +234,8 @@ class ComplaintListScreen extends ConsumerWidget {
                 maxLines: 4,
                 onChanged: (val) => description = val,
               ),
+              const SizedBox(height: 12),
+              const Text('You can add photos in the chat after creating.', style: TextStyle(fontSize: 12, color: Colors.grey)),
             ],
           ),
           actions: [
@@ -171,8 +254,8 @@ class ComplaintListScreen extends ConsumerWidget {
 
                 final complaint = Complaint(
                   id: '',
-                  residentId: user.uid,
-                  flatNumber: "${appUser.wing}-${appUser.flatNumber}",
+                  residentId: user.id,
+                  flatNumber: '${appUser.wing}-${appUser.flatNumber}',
                   title: selectedCategory,
                   description: description,
                   status: 'open',
@@ -180,6 +263,15 @@ class ComplaintListScreen extends ConsumerWidget {
                 );
 
                 await ref.read(firestoreServiceProvider).addComplaint(complaint);
+                
+                // 🔔 Notify Admins
+                await ref.read(notificationServiceProvider).notifyByTag(
+                  tagKey: 'role',
+                  tagValue: 'admin',
+                  title: '⚠️ New Complaint: ${appUser.wing}-${appUser.flatNumber}',
+                  message: '$selectedCategory: $description',
+                  data: {'priority': 'high'},
+                );
                 if (context.mounted) {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -194,4 +286,4 @@ class ComplaintListScreen extends ConsumerWidget {
       ),
     );
   }
-}
+} // End class

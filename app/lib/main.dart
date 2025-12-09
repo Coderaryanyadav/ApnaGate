@@ -1,43 +1,110 @@
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app.dart';
-import 'firebase_options.dart';
 import 'services/ads_service.dart';
+import 'supabase_config.dart';
+import 'widgets/error_boundary.dart';
+import 'package:flutter/foundation.dart'; // Added for BindingBase
 
-// 🔔 Background Notification Handler (App Closed/Background)
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  // Background notifications are auto-displayed by FCM
-}
+import 'package:onesignal_flutter/onesignal_flutter.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+// import 'package:audioplayers/audioplayers.dart'; // Added
+
+import 'services/background_service.dart';
 
 void main() async {
+  // 1. Init Bindings + Disable Zone Warning
   WidgetsFlutterBinding.ensureInitialized();
+  BindingBase.debugZoneErrorsAreFatal = false;
   
-  // Initialize Firebase with generated options
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  // 🔴 CRITICAL: Catch all async errors globally
+  await runZonedGuarded(() async {
+    // Init Background Service (Config only)
+    await initializeBackgroundService();
+    
+    // ONLY critical initialization - everything else lazy loaded
+    await Supabase.initialize(
+      url: SupabaseConfig.url,
+      anonKey: SupabaseConfig.anonKey,
+    );
 
-  // 🔥 Initialize Crashlytics
-  FlutterError.onError = (errorDetails) {
-    FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
-  };
-  // Pass all uncaught asynchronous errors to Crashlytics
-  PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    return true;
-  };
+    // 🛡️ Wrap app with ErrorBoundary to catch all errors
+    runApp(
+      const ErrorBoundary(
+        child: ProviderScope(child: CrescentGateApp()),
+      ),
+    );
+    
+    // Initialize everything else in background AFTER app starts
+    // ignore: unawaited_futures
+    Future.microtask(() async {
+      await AdsService.initialize();
+      _initOneSignalBackground();
+    });
+  }, (error, stack) {
+    // Log all uncaught errors
+    debugPrint('🔴 Uncaught error: $error');
+    debugPrint('Stack trace: $stack');
+    // TODO: Send to crash reporting service (Sentry/Firebase Crashlytics)
+  });
+}
 
-  // Register background handler
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+Future<void> _initOneSignalBackground() async {
+  try {
+    OneSignal.Debug.setLogLevel(OSLogLevel.verbose); // Changed to verbose for debugging
+    OneSignal.initialize('5e9deb0b-b39a-4259-ae19-5f9d05840b03');
+    
+    // Wait for OneSignal to be ready
+    await Future.delayed(const Duration(milliseconds: 1000));
+    
+    // Request permission and wait for it
+    await OneSignal.Notifications.requestPermission(true);
+    
+    // Wait for subscription to be active
+    await Future.delayed(const Duration(milliseconds: 1000));
+    
+    debugPrint('✅ OneSignal initialized and ready');
 
-  // Initialize AdMob
-  await AdsService.initialize();
+    final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    // 🤫 1. Create Silent Channel for Background Service (Stealth Mode)
+    const AndroidNotificationChannel serviceChannel = AndroidNotificationChannel(
+      'crescent_bg_service',
+      'Background Monitor',
+      description: 'Keeps the app running to listen for doorbell',
+      importance: Importance.low, // Silent, minified
+      playSound: false,
+      showBadge: false,
+    );
 
-  runApp(const ProviderScope(child: CrescentGateApp()));
+    // 🔔 2. Force High Priority Channel for Sound
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'crescent_gate_alarm_v2', // Updated to v2 to force config refresh
+      'Emergency Alarms',
+      description: 'Loud notifications for visitor arrivals',
+      importance: Importance.max,
+      playSound: true,
+      sound: RawResourceAndroidNotificationSound('notification'),
+      enableVibration: true,
+    );
+    
+    final androidPlugin = flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+        
+    await androidPlugin?.createNotificationChannel(serviceChannel); // Create Silent
+    await androidPlugin?.createNotificationChannel(channel);        // Create Loud
+
+    // Force notification to show in foreground with Sound
+    OneSignal.Notifications.addForegroundWillDisplayListener((event) {
+      // 🔊 Manual Sound Trigger for extra loudness (if asset exists)
+      // final player = AudioPlayer();
+      // player.play(AssetSource('sounds/alarm.mp3'));
+      
+      event.notification.display();
+    });
+  } catch (e) {
+    // Silent fail
+    debugPrint('OneSignal init error: $e');
+  }
 }

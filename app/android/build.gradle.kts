@@ -17,6 +17,11 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
+    
+    // Suppress all Java warnings globally
+    tasks.withType<JavaCompile> {
+        options.compilerArgs.addAll(listOf("-nowarn"))
+    }
 }
 
 tasks.register<Delete>("clean") {

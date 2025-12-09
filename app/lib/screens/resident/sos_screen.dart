@@ -1,55 +1,82 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
+import '../../services/notification_service.dart';
+import '../../widgets/confirmation_dialog.dart';
+import '../../utils/sos_rate_limiter.dart';
+import '../../utils/haptic_helper.dart';
 
-class SOSScreen extends ConsumerStatefulWidget {
-  const SOSScreen({super.key});
+import '../../utils/app_constants.dart';
+
+class SosScreen extends ConsumerStatefulWidget {
+  const SosScreen({super.key});
 
   @override
-  ConsumerState<SOSScreen> createState() => _SOSScreenState();
+  ConsumerState<SosScreen> createState() => _SosScreenState();
 }
 
-class _SOSScreenState extends ConsumerState<SOSScreen> {
+class _SosScreenState extends ConsumerState<SosScreen> {
   bool _isSending = false;
 
   Future<void> _sendSOS() async {
-    if (_isSending) return;
-    
-    setState(() => _isSending = true);
-    
-    // 🔊 Haptic Feedback
-    HapticFeedback.heavyImpact();
-    await Future.delayed(const Duration(milliseconds: 200));
-    HapticFeedback.heavyImpact();
-    await Future.delayed(const Duration(milliseconds: 200));
-    HapticFeedback.heavyImpact();
-    
-    try {
-      final user = ref.read(authServiceProvider).currentUser;
-      if (user == null) return;
-
-      final firestore = ref.read(firestoreServiceProvider);
-      final appUser = await firestore.getUser(user.uid);
-      
-      if (appUser?.flatNumber == null) {
-        throw Exception('Flat number not found');
+    // Check rate limit
+    final canSend = await SOSRateLimiter.canSendSOS();
+    if (!canSend) {
+      final remaining = await SOSRateLimiter.getRemainingCooldown();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Please wait $remaining minutes before sending another SOS'),
+            backgroundColor: Colors.orange,
+          ),
+        );
       }
+      return;
+    }
 
-      await firestore.sendSOS(user.uid, appUser!.flatNumber!);
+    // Show confirmation
+    if (mounted) {
+      final confirmed = await ConfirmationDialog.confirmSOS(context: context);
+      if (!confirmed) return;
+    }
+
+    setState(() => _isSending = true);
+
+    final user = ref.read(authServiceProvider).currentUser;
+    if (user == null) {
+        setState(() => _isSending = false);
+        return;
+    }
+
+    try {
+      // Fetch user profile for details
+      final appUser = await ref.read(firestoreServiceProvider).getUser(user.id);
+      
+      if (appUser == null) throw Exception('User profile not found');
+
+      // 1. Send to Firestore
+      await ref.read(firestoreServiceProvider).sendSOS(wing: appUser.wing);
+
+      // 2. Push Notification
+      await ref.read(notificationServiceProvider).notifyByTag(
+        tagKey: 'role',
+        tagValue: 'guard',
+        title: '🚨 SOS ALERT',
+        message: 'Emergency at ${appUser.wing ?? 'Unknown'}-${appUser.flatNumber ?? '000'}',
+      );
       
       if (mounted) {
         // Success vibration
-        HapticFeedback.mediumImpact();
+        HapticHelper.heavyImpact();
         
-        showDialog(
+        await showDialog(
           context: context,
           builder: (context) => AlertDialog(
             title: const Row(
               children: [
                 Icon(Icons.check_circle, color: Colors.green, size: 28),
-                SizedBox(width: 8),
+                SizedBox(width: AppConstants.spacing8),
                 Text('🚨 SOS SENT'),
               ],
             ),
@@ -77,7 +104,10 @@ class _SOSScreenState extends ConsumerState<SOSScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return Scaffold(
+      backgroundColor: Colors.black, // Dark theme
+      appBar: AppBar(title: const Text('SOS Alert'), backgroundColor: Colors.transparent),
+      body: Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -85,7 +115,7 @@ class _SOSScreenState extends ConsumerState<SOSScreen> {
             '🚨 EMERGENCY',
             style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.red),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppConstants.spacing16),
           Text(
             _isSending ? 'Sending alert...' : 'Press and hold to alert security',
             style: TextStyle(
@@ -94,7 +124,7 @@ class _SOSScreenState extends ConsumerState<SOSScreen> {
               fontWeight: _isSending ? FontWeight.bold : FontWeight.normal,
             ),
           ),
-          const SizedBox(height: 48),
+          const SizedBox(height: AppConstants.spacing48),
           GestureDetector(
             onLongPress: _isSending ? null : _sendSOS,
             child: AnimatedContainer(
@@ -124,6 +154,7 @@ class _SOSScreenState extends ConsumerState<SOSScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

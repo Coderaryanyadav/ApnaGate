@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // For HapticFeedback
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/extras.dart';
+import '../../services/notification_service.dart';
 import '../../services/firestore_service.dart';
 
 class StaffEntryScreen extends ConsumerStatefulWidget {
@@ -25,12 +26,14 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
             padding: const EdgeInsets.all(16.0),
             child: TextField(
               controller: _searchController,
+              style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 labelText: 'Search Staff',
-                prefixIcon: const Icon(Icons.search),
+                labelStyle: const TextStyle(color: Colors.white70),
+                prefixIcon: const Icon(Icons.search, color: Colors.white70),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 filled: true,
-                fillColor: Colors.grey[100],
+                fillColor: Colors.white.withValues(alpha: 0.1),
               ),
               onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
             ),
@@ -67,7 +70,10 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
                           child: Icon(Icons.person, color: isIn ? Colors.green : Colors.grey),
                         ),
                         title: Text(staff.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(staff.category),
+                        subtitle: Text(
+                          '${staff.category} • ${staff.status == 'in' ? 'Since' : 'Last seen'}: ${staff.lastActive != null ? TimeOfDay.fromDateTime(staff.lastActive!).format(context) : 'N/A'}',
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
                         trailing: SizedBox(
                           width: 120,
                           child: ElevatedButton(
@@ -94,10 +100,32 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
 
   Future<void> _toggleStatus(ServiceProvider staff) async {
     // 📳 Haptic Feedback
+    // ignore: deprecated_member_use, unawaited_futures
     HapticFeedback.mediumImpact();
     
     final newStatus = staff.status == 'in' ? 'out' : 'in';
+    // 1. Update Database
     await ref.read(firestoreServiceProvider).updateProviderStatus(staff.id, newStatus);
+    
+    // 2. Notify Admin
+    try {
+        final action = newStatus == 'in' ? 'Checked In' : 'Checked Out';
+        final message = '${staff.name} ($action) - ${staff.category}';
+        
+        await ref.read(notificationServiceProvider).notifyByTag(
+          tagKey: 'role', 
+          tagValue: 'admin', 
+          title: 'Staff Update', 
+          message: message,
+          data: {'type': 'staff_update', 'staff_id': staff.id, 'status': newStatus}
+        );
+    } catch (e) {
+        debugPrint('Failed to notify admin: $e');
+    }
+    
+    // Force refresh UI (Works even if Realtime is off)
+    // ignore: unused_result
+    ref.refresh(firestoreServiceProvider);
     
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../auth_wrapper.dart'; // Import the new wrapper
+import '../utils/app_routes.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -32,16 +32,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
 
     _controller.forward();
 
-    // Navigate after 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
+    // Navigate INSTANTLY (no artificial delay)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            pageBuilder: (_, __, ___) => const AuthWrapper(),
-            transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
-            transitionDuration: const Duration(milliseconds: 800),
-          ),
-        );
+        Navigator.of(context).pushReplacementNamed(AppRoutes.authWrapper);
       }
     });
   }
@@ -66,11 +60,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
               child: Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: Colors.indigo.withOpacity(0.2),
+                  color: Colors.indigo.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.indigo.withOpacity(0.5),
+                      color: Colors.indigo.withValues(alpha: 0.5),
                       blurRadius: 30,
                       spreadRadius: 10,
                     ),
@@ -93,7 +87,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 4,
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.9),
                     ),
                   ),
                   const SizedBox(height: 12),

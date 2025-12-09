@@ -1,282 +1,291 @@
-import 'dart:convert';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // For HapticFeedback
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../app.dart';
-import '../models/visitor_request.dart';
-import 'firestore_service.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
+import 'dart:convert';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../supabase_config.dart';
 
 final notificationServiceProvider = Provider<NotificationService>((ref) {
-  return NotificationService(ref);
+  return NotificationService();
 });
 
+/// 🔔 Notification Service - Secure Implementation
+/// Uses environment variables for API keys
+
 class NotificationService {
-  final Ref ref;
-  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  static final String _oneSignalRestApiKey = SupabaseConfig.oneSignalRestApiKey;
+  static const String _oneSignalAppId = SupabaseConfig.oneSignalAppId;
+  static const String _baseUrl = 'https://onesignal.com/api/v1/notifications';
 
-  NotificationService(this.ref);
+  Future<void> notifyUser({
+    required String userId,
+    required String title,
+    required String message,
+    Map<String, dynamic>? data,
+    bool isSilent = false, // Added parameter
+  }) async {
+    try {
+      // First, get the OneSignal Player ID from the database
+      debugPrint('🔍 Looking up Player ID for user: $userId');
+      final supabase = Supabase.instance.client;
+      final profile = await supabase
+          .from('profiles')
+          .select('onesignal_player_id, name')
+          .eq('id', userId)
+          .maybeSingle();
+      
+      debugPrint('🔍 Profile found: ${profile?['name']}, Player ID: ${profile?['onesignal_player_id']}');
+      
+      final playerId = profile?['onesignal_player_id'];
 
-  Future<void> initialize(String uid, String role) async {
-    // Request permission
-    await _fcm.requestPermission(alert: true, badge: true, sound: true);
-    
-    // Topic Subscriptions based on Role
-    if (role == 'guard' || role == 'admin') {
-      await _fcm.subscribeToTopic('security_alerts');
-      await _fcm.subscribeToTopic('guards');
-      if (role == 'admin') await _fcm.subscribeToTopic('admin_updates');
-    } else {
-      await _fcm.subscribeToTopic('residents');
+      
+      if (playerId == null) {
+        debugPrint('❌ No OneSignal Player ID found for user $userId');
+        return;
+      }
+      
+      final body = {
+        'app_id': _oneSignalAppId,
+        // Use player IDs instead of external user IDs
+        'include_player_ids': [playerId],
+        'headings': {'en': title},
+        'contents': {'en': message},
+        'priority': isSilent ? 5 : 10,
+        'ttl': 3600,
+        'data': data ?? {},
+      };
+
+      if (!isSilent) {
+        body['ios_sound'] = 'notification.wav';
+        body['android_sound'] = 'notification';
+      }
+
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic $_oneSignalRestApiKey',
+        },
+        body: jsonEncode(body),
+      );
+
+      debugPrint('📡 OneSignal Response for $userId: ${response.statusCode}');
+      debugPrint('📡 Response Body: ${response.body}');
+
+      if (response.statusCode != 200) {
+        debugPrint('❌ OneSignal Error for $userId: ${response.body}');
+      } else {
+        final responseData = jsonDecode(response.body);
+        final recipients = responseData['recipients'] ?? 0;
+        debugPrint('✅ OneSignal sent to $recipients recipient(s) for user $userId');
+      }
+    } catch (e) {
+      debugPrint('❌ Notification Exception for $userId: $e');
     }
+  }
 
-    // Get token
-    String? token = await _fcm.getToken();
-    if (token != null) {
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'fcmToken': token,
-      });
+  /// Send notification to all users with specific tag (e.g., all guards)
+  Future<void> notifyByTag({
+    required String tagKey,
+    required String tagValue,
+    required String title,
+    required String message,
+    Map<String, dynamic>? data,
+    bool isSilent = false,
+  }) async {  
+    try {
+      final body = {
+        'app_id': _oneSignalAppId,
+        'filters': [
+          {'field': 'tag', 'key': tagKey, 'relation': '=', 'value': tagValue}
+        ],
+        'headings': {'en': title},
+        'contents': {'en': message},
+        'priority': isSilent ? 5 : 10,
+        'ttl': 3600,
+        'data': data ?? {},
+      };
+
+      if (!isSilent) {
+        // Removed android_channel_id - using OneSignal default
+        body['ios_sound'] = 'notification.wav';
+        body['android_sound'] = 'notification';
+      }
+
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic $_oneSignalRestApiKey',
+        },
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode != 200) {
+        debugPrint('OneSignal Error: ${response.body}');
+      } else {
+        debugPrint('✅ Notification sent to tag: $tagKey=$tagValue (Silent: $isSilent)');
+      }
+    } catch (e) {
+      debugPrint('❌ Notification Error: $e');
     }
+  }
 
-    _fcm.onTokenRefresh.listen((token) {
-       FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'fcmToken': token,
-      });
-    });
+  /// Notify specific flat (wing + flat number)
+  /// Uses BOTH OneSignal AND Supabase Realtime for guaranteed delivery
+  Future<void> notifyFlat({
+    required String wing,
+    required String flatNumber,
+    required String title,
+    required String message,
+  }) async {
+    try {
+      // Query database for all users in this flat
+      final supabase = Supabase.instance.client;
+      final usersResponse = await supabase
+          .from('profiles')
+          .select('id, name')
+          .eq('wing', wing.toUpperCase())
+          .eq('flat_number', flatNumber.toUpperCase());
+      
+      final users = usersResponse as List<dynamic>;
+      
+      if (users.isEmpty) return;
+      
+      // Send notification to each user using BOTH methods
+      for (var user in users) {
+        try {
+          // Method 1: Try OneSignal (best for push notifications)
+          try {
+            await notifyUser(
+              userId: user['id'],
+              title: title,
+              message: message,
+            );
+          } catch (_) {}
+          
+          // Method 2: ALWAYS use Supabase Realtime (guaranteed delivery)
+          try {
+            await supabase.from('notifications').insert({
+              'user_id': user['id'],
+              'title': title,
+              'message': message,
+              'data': {'type': 'visitor_arrival', 'wing': wing, 'flat_number': flatNumber},
+            });
+          } catch (e) {
+            debugPrint('realtime_error:${user['id']}:$e'); 
+          }
+          
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('❌ Notification Error: $e');
+    }
+  }
 
-    // Foreground notification setup
-    const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    const InitializationSettings initializationSettings =
-        InitializationSettings(android: initializationSettingsAndroid);
-    
-    await _localNotifications.initialize(initializationSettings);
+  /// Smart notification: Notify tenants if present, otherwise notify owners
+  Future<void> notifyVisitorArrival({
+    required String residentId,
+    required String visitorName,
+    required String flatNumber,
+    required String wing,
+    String visitorId = '',
+  }) async {
+    try {
+      // Import Supabase to query profiles
+      final supabase = Supabase.instance.client;
+      
+      // 1. Check if there are any TENANTS in this flat
+      final tenantsResponse = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('wing', wing.toUpperCase())
+          .eq('flat_number', flatNumber.toUpperCase())
+          .eq('user_type', 'tenant');
+      
+      final tenants = tenantsResponse as List<dynamic>;
+      
+      if (tenants.isNotEmpty) {
+        // Tenants exist - notify ONLY tenants
+        debugPrint('🏠 Notifying ${tenants.length} tenant(s) for $wing-$flatNumber');
+        for (var tenant in tenants) {
+          await notifyUser(
+            userId: tenant['id'],
+            title: '🔔 New Visitor!',
+            message: '$visitorName is waiting at $wing-$flatNumber',
+            data: {'type': 'visitor_arrival', 'visitor_id': visitorId},
+          );
+        }
+      } else {
+        // No tenants - notify ALL residents (owners + family)
+        debugPrint('🏠 No tenants found, notifying all residents for $wing-$flatNumber');
+        await notifyFlat(
+          wing: wing,
+          flatNumber: flatNumber,
+          title: '🔔 New Visitor!',
+          message: '$visitorName is waiting at $wing-$flatNumber',
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Smart notification error: $e');
+      // Fallback to flat-wide notification
+      await notifyFlat(
+        wing: wing,
+        flatNumber: flatNumber,
+        title: '🔔 New Visitor!',
+        message: '$visitorName is waiting at $wing-$flatNumber',
+      );
+    }
+  }
 
-    // 🔊 CREATE NOTIFICATION CHANNEL (Android 8.0+)
-    const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'high_importance_channel',
-      'High Importance Notifications',
-      description: 'Critical visitor and security alerts',
-      importance: Importance.max,
-      playSound: true,
-      enableVibration: true,
-      enableLights: true,
-      showBadge: true,
+  /// Notify all guards about SOS
+  Future<void> notifySOSAlert({
+    required String wing,
+    required String flatNumber,
+    required String residentName,
+  }) async {
+    await notifyByTag(
+      tagKey: 'role',
+      tagValue: 'guard',
+      title: '🚨 SOS ALERT',
+      message: 'EMERGENCY at $wing-$flatNumber by $residentName',
+      data: {
+        'type': 'sos_alert',
+        'wing': wing,
+        'flat_number': flatNumber,
+      },
     );
 
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
-
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      if (message.data['type'] == 'visitor_request') {
-        // 🚀 Premium Dialog for Visitor Requests
-        _showApprovalDialog(message.data);
-      } else {
-        // Standard Notification
-        _showNotification(message);
-      }
-    });
+    await notifyByTag(
+      tagKey: 'role',
+      tagValue: 'admin',
+      title: '🚨 SOS ALERT',
+      message: 'EMERGENCY at $wing-$flatNumber by $residentName',
+      data: {
+        'type': 'sos_alert',
+        'wing': wing,
+        'flat_number': flatNumber,
+      },
+    );
   }
 
-  Future<void> _showApprovalDialog(Map<String, dynamic> data) async {
-    final context = navigatorKey.currentContext;
-    if (context == null) return;
-
-    final requestId = data['requestId'];
-    if (requestId == null) return;
-
-    // Fetch full request details
-    try {
-      final doc = await FirebaseFirestore.instance.collection('visitorRequests').doc(requestId).get();
-      if (!doc.exists) return;
-
-      final request = VisitorRequest.fromMap(doc.data()!, doc.id);
-
-      final ctx = navigatorKey.currentContext;
-      if (ctx == null) return;
-
-      // Show Dialog
-      showDialog(
-        context: ctx,
-        barrierDismissible: false, // Force action
-        builder: (context) => _VisitorApprovalDialog(request: request, ref: ref),
-      );
-    } catch (e) {
-      // debugPrint('Error fetching request: $e');
-    }
-  }
-
-  Future<void> _showNotification(RemoteMessage message) async {
-    RemoteNotification? notification = message.notification;
-    AndroidNotification? android = message.notification?.android;
-
-    if (notification != null && android != null) {
-      await _localNotifications.show(
-        notification.hashCode,
-        notification.title,
-        notification.body,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'high_importance_channel',
-            'High Importance Notifications',
-            importance: Importance.max,
-            priority: Priority.high,
-          ),
-        ),
-      );
-    }
-  }
-}
-
-// 💎 Premium Dialog Component
-class _VisitorApprovalDialog extends StatefulWidget {
-  final VisitorRequest request;
-  final Ref ref;
-
-  const _VisitorApprovalDialog({required this.request, required this.ref});
-
-  @override
-  State<_VisitorApprovalDialog> createState() => _VisitorApprovalDialogState();
-}
-
-class _VisitorApprovalDialogState extends State<_VisitorApprovalDialog> {
-  bool _isLoading = false;
-
-  Future<void> _handleAction(String status) async {
-    // 📳 Haptic Feedback
-    if (status == 'approved') {
-      HapticFeedback.heavyImpact();
-    } else {
-      HapticFeedback.vibrate();
-    }
-    
-    setState(() => _isLoading = true);
-    try {
-      await widget.ref.read(firestoreServiceProvider).updateVisitorStatus(widget.request.id, status);
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
-      // Handle error
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Decode Photo
-    Widget imageWidget;
-    try {
-      if (widget.request.photoUrl.startsWith('http')) {
-        imageWidget = Image.network(widget.request.photoUrl, fit: BoxFit.cover);
-      } else {
-        imageWidget = Image.memory(base64Decode(widget.request.photoUrl), fit: BoxFit.cover);
-      }
-    } catch (e) {
-      imageWidget = Container(color: Colors.grey, child: const Icon(Icons.person));
-    }
-
-    return TweenAnimationBuilder<double>(
-      duration: const Duration(milliseconds: 300),
-      tween: Tween(begin: 0.8, end: 1.0),
-      curve: Curves.easeOutBack,
-      builder: (context, scale, child) => Transform.scale(
-        scale: scale,
-        child: Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      elevation: 0,
-      backgroundColor: Colors.transparent,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E1E1E), // Dark Background
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white10),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20, offset: const Offset(0, 10)),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 📸 Circular Photo with Ring
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.indigo.shade200, width: 2),
-              ),
-              child: CircleAvatar(
-                radius: 50,
-                backgroundColor: Colors.grey[800],
-                backgroundImage: (imageWidget as Image).image,
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            // 📝 Name & Purpose
-            Text(
-              widget.request.visitorName,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white10,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.orange.withOpacity(0.5)),
-              ),
-              child: Text(
-                widget.request.purpose.toUpperCase(),
-                style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 12),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // ⚡ Actions
-            if (_isLoading)
-              const CircularProgressIndicator()
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => _handleAction('rejected'),
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        side: BorderSide(color: Colors.red.shade400),
-                        foregroundColor: Colors.redAccent,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: const Text('DENY'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => _handleAction('approved'),
-                      style: ElevatedButton.styleFrom(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        backgroundColor: Colors.green, // Green for Approve
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        elevation: 4,
-                      ),
-                      child: const Text('APPROVE'),
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
-        ),
-      ),
+  /// Notify resident when visitor is approved/rejected - WITH SOUND ALERT
+  Future<void> notifyVisitorStatus({
+    required String residentId,
+    required String visitorName,
+    required bool isApproved,
+  }) async {
+    await notifyUser(
+      userId: residentId,
+      title: isApproved ? '✅ Visitor Approved' : '❌ Visitor Rejected',
+      message: isApproved 
+          ? '$visitorName has been granted entry'
+          : '$visitorName entry was declined',
+      data: {
+        'type': 'visitor_status', 
+        'approved': isApproved,
+        'alert': 'true', // Force alert sound
+      },
     );
   }
 }

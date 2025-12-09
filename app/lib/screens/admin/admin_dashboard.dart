@@ -1,11 +1,13 @@
+import 'dart:async';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/auth_service.dart';
+import 'package:flutter/services.dart';
 import '../../services/firestore_service.dart';
-import 'user_management.dart';
-import 'notice_admin.dart';
-import 'admin_extras.dart';
-import 'analytics_dashboard.dart';
+
+import '../../utils/app_routes.dart';
+import '../../utils/app_constants.dart';
 
 class AdminDashboard extends ConsumerStatefulWidget {
   const AdminDashboard({super.key});
@@ -14,9 +16,44 @@ class AdminDashboard extends ConsumerStatefulWidget {
   ConsumerState<AdminDashboard> createState() => _AdminDashboardState();
 }
 
+
+
 class _AdminDashboardState extends ConsumerState<AdminDashboard> {
   final Set<String> _handledAlerts = {};
   bool _isAlertShowing = false;
+  Timer? _refreshTimer;
+  static bool _hasSetupOneSignal = false;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // OneSignal Setup
+    if (!_hasSetupOneSignal) {
+      _hasSetupOneSignal = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _setupOneSignal());
+    }
+
+    // Auto-refresh every 10 seconds as requested
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _setupOneSignal() {
+    final user = ref.read(authServiceProvider).currentUser;
+    if (user != null) {
+      OneSignal.login(user.id);
+      OneSignal.User.addTagWithKey('role', 'admin');
+    }
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null; // Clear reference
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,148 +79,318 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
         }
 
         return Scaffold(
-          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          backgroundColor: const Color(0xFF0A0A0A),
           body: CustomScrollView(
             slivers: [
-              // 1. App Bar
+              // 1. Modern Gradient App Bar
               SliverAppBar(
-                expandedHeight: 120.0,
+                expandedHeight: 160.0,
                 floating: false,
                 pinned: true,
-                backgroundColor: Colors.indigo.shade800,
+                backgroundColor: Colors.transparent,
                 flexibleSpace: FlexibleSpaceBar(
-                  title: const Text('Admin Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
+                  title: const Text(
+                    'Admin Dashboard',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 24,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
                   background: Container(
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       gradient: LinearGradient(
-                        begin: Alignment.topRight,
-                        end: Alignment.bottomLeft,
-                        colors: [Colors.indigo.shade900, Colors.indigo.shade600],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color(0xFF1a1a2e),
+                          Color(0xFF16213e),
+                          Color(0xFF0f3460),
+                        ],
                       ),
+                    ),
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          right: -50,
+                          top: -50,
+                          child: Container(
+                            width: 200,
+                            height: 200,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.05),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: -30,
+                          bottom: -30,
+                          child: Container(
+                            width: 150,
+                            height: 150,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.03),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
                 actions: [
                   IconButton(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AnalyticsDashboard())),
-                    icon: const Icon(Icons.analytics),
+                    onPressed: () => Navigator.pushNamed(context, AppRoutes.analytics),
+                    icon: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.analytics_outlined, color: Colors.white, size: 20),
+                    ),
                     tooltip: 'Analytics',
                   ),
+                  const SizedBox(width: 8),
                   IconButton(
                     onPressed: () => ref.read(authServiceProvider).signOut(),
-                    icon: const Icon(Icons.logout),
+                    icon: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.logout, color: Colors.redAccent, size: 20),
+                    ),
                     tooltip: 'Logout',
                   ),
+                  const SizedBox(width: 16),
                 ],
               ),
 
-              // 2. User Management Button
+              // 2. Quick Stats Cards
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UserManagementScreen())),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 4,
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.manage_accounts, color: Colors.white),
-                        SizedBox(width: 8),
-                        Text('MANAGE USERS & RESIDENTS', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // 3. Menu Grid
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4, bottom: 12),
-                        child: Text('Building Management', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[400])),
-                      ),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _MenuButton(
-                              icon: Icons.announcement,
-                              label: 'Notices',
-                              color: Colors.blue,
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NoticeAdminScreen())),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _MenuButton(
-                              icon: Icons.report_problem,
-                              label: 'Complaints',
-                              color: Colors.red,
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ComplaintAdminScreen())),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _MenuButton(
-                              icon: Icons.handyman,
-                              label: 'Services',
-                              color: Colors.orange,
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ServiceAdminScreen())),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-                  ),
-                ),
-              ),
-
-              // 4. Statistics
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: FutureBuilder<Map<String, dynamic>>(
+                  padding: const EdgeInsets.all(20.0),
+                  child: FutureBuilder<Map<String, int>>(
                     future: ref.read(firestoreServiceProvider).getUserStats(),
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) {
-                        return const Center(child: CircularProgressIndicator());
+                        return const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(40),
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        );
                       }
                       final stats = snapshot.data!;
                       final residents = stats['residents'] ?? 0;
                       final guards = stats['guards'] ?? 0;
                       final total = stats['total'] ?? 0;
-                      
-                      const wingsText = 'A & B';
 
-                      return GridView.count(
-                        crossAxisCount: 2,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 1.5,
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _StatCard(title: 'Total Residents', value: '$residents', icon: Icons.home, color: Colors.indigo),
-                          _StatCard(title: 'Active Guards', value: '$guards', icon: Icons.security, color: Colors.green),
-                          _StatCard(title: 'Total Users', value: '$total', icon: Icons.people, color: Colors.orange),
-                          _StatCard(title: 'Wings', value: wingsText, icon: Icons.apartment, color: Colors.purple),
+                          const Text(
+                            'Overview',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          GridView.count(
+                            crossAxisCount: 2,
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            mainAxisSpacing: 16,
+                            crossAxisSpacing: 16,
+                            childAspectRatio: 1.4,
+                            children: [
+                              _ModernStatCard(
+                                title: 'Residents',
+                                value: '$residents',
+                                icon: Icons.people_outline,
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+                                ),
+                              ),
+                              _ModernStatCard(
+                                title: 'Guards',
+                                value: '$guards',
+                                icon: Icons.shield_outlined,
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFFf093fb), Color(0xFFf5576c)],
+                                ),
+                              ),
+                              _ModernStatCard(
+                                title: 'Total Users',
+                                value: '$total',
+                                icon: Icons.group_outlined,
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF4facfe), Color(0xFF00f2fe)],
+                                ),
+                              ),
+                              _ModernStatCard(
+                                title: 'Wings',
+                                value: 'A & B',
+                                icon: Icons.apartment_outlined,
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF43e97b), Color(0xFF38f9d7)],
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       );
                     },
                   ),
                 ),
               ),
-              const SliverFillRemaining(hasScrollBody: false),
+
+              // 3. User Management Card
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFfa709a), Color(0xFFfee140)],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFfa709a).withValues(alpha: 0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => Navigator.pushNamed(context, AppRoutes.userManagement),
+                        borderRadius: BorderRadius.circular(20),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.3),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Icon(
+                                  Icons.manage_accounts,
+                                  color: Colors.white,
+                                  size: 32,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'User Management',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      'Manage residents & access',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(
+                                Icons.arrow_forward_ios,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // 4. Building Management Section
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Building Management',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _ModernMenuButton(
+                              icon: Icons.announcement_outlined,
+                              label: 'Notices',
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+                              ),
+                              onTap: () => Navigator.pushNamed(context, AppRoutes.noticeAdmin),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _ModernMenuButton(
+                              icon: Icons.report_problem_outlined,
+                              label: 'Complaints',
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFf093fb), Color(0xFFf5576c)],
+                              ),
+                              onTap: () => Navigator.pushNamed(context, AppRoutes.complaints),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _ModernMenuButton(
+                              icon: Icons.handyman_outlined,
+                              label: 'Services',
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF4facfe), Color(0xFF00f2fe)],
+                              ),
+                              onTap: () => Navigator.pushNamed(context, AppRoutes.serviceProviders),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 40)),
             ],
           ),
         );
@@ -193,36 +400,94 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
 
   void _showSOSDialog(Map<String, dynamic> alert) {
     setState(() => _isAlertShowing = true);
-    
+    // SOS REMAINS RED (Emergency) but UI can be cleaner
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.red[900],
-        title: const Row(children: [Icon(Icons.warning, color: Colors.white), SizedBox(width: 8), Text('SOS ALERT', style: TextStyle(color: Colors.white))]),
+        backgroundColor: Colors.black, // Changed to black for contrast
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Colors.red, width: 2), // Red border for urgency
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 32),
+            SizedBox(width: 8),
+            Text('SOS DETECTED', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
+          ]
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('EMERGENCY REPORTED', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            Text('Flat: ${alert['flatNumber']}', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-            if (alert['residentId'] != null) ...[
-               const SizedBox(height: 8),
-               Text('ID: ${alert['residentId']}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-            ],
-            const SizedBox(height: 8),
-            Text('Time: ${DateTime.now().hour}:${DateTime.now().minute}', style: const TextStyle(color: Colors.white70)),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   Row(
+                    children: [
+                      const Icon(Icons.location_on, color: Colors.white70, size: 20),
+                      const SizedBox(width: AppConstants.spacing8),
+                      Text(
+                        'WING ${alert['wing'] ?? '?'} - FLAT ${alert['flat_number'] ?? alert['flatNumber'] ?? '?'}',
+                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppConstants.spacing12),
+                  Row(
+                    children: [
+                      const Icon(Icons.person, color: Colors.white70, size: 20),
+                      const SizedBox(width: AppConstants.spacing8),
+                      Expanded(
+                        child: Text(
+                          'Resident: ${alert['residentName'] ?? 'Unknown'}',
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppConstants.spacing16),
+            Text(
+              'Time: ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}', 
+              style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic)
+            ),
           ],
         ),
         actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.red),
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() => _isAlertShowing = false);
-            },
-            child: const Text('ACKNOWLEDGE'),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red, // Solid Red for action
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () async {
+                // 1. Resolve in DB
+                await ref.read(firestoreServiceProvider).resolveSOS(alert['id']);
+                
+                // 2. Play Haptic
+                // ignore: deprecated_member_use, unawaited_futures
+                HapticFeedback.heavyImpact();
+
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  setState(() => _isAlertShowing = false);
+                }
+              },
+              child: const Text('ACKNOWLEDGE ALERT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
           ),
         ],
       ),
@@ -230,96 +495,138 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
   }
 }
 
-class _StatCard extends StatelessWidget {
+// Modern Stat Card with Gradient
+class _ModernStatCard extends StatelessWidget {
   final String title;
   final String value;
   final IconData icon;
-  final Color color;
+  final Gradient gradient;
 
-  const _StatCard({required this.title, required this.value, required this.icon, required this.color});
+  const _ModernStatCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.gradient,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final cardColor = Theme.of(context).cardTheme.color ?? const Color(0xFF1E1E1E);
-    
     return Container(
       decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(16),
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
         ],
-        border: Border.all(color: Colors.white10),
       ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Icon(icon, color: color, size: 28),
-              Text(
-                value,
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
               ),
-            ],
-          ),
-          Text(
-            title,
-            style: const TextStyle(fontSize: 14, color: Colors.white70, fontWeight: FontWeight.bold),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+              child: Icon(icon, color: Colors.white, size: 24),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _MenuButton extends StatelessWidget {
+// Modern Menu Button
+class _ModernMenuButton extends StatelessWidget {
   final IconData icon;
   final String label;
-  final Color color;
+  final Gradient gradient;
   final VoidCallback onTap;
 
-  const _MenuButton({required this.icon, required this.label, required this.color, required this.onTap});
+  const _ModernMenuButton({
+    required this.icon,
+    required this.label,
+    required this.gradient,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Material(
-        color: Theme.of(context).cardTheme.color,
+    return Container(
+      height: 120,
+      decoration: BoxDecoration(
+        gradient: gradient,
         borderRadius: BorderRadius.circular(16),
-        elevation: 4,
-        child: Container(
-          height: 100,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.2),
-                  shape: BoxShape.circle,
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 28),
                 ),
-                child: Icon(icon, color: color, size: 28),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+                const SizedBox(height: 12),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    fontSize: 13,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ),
       ),

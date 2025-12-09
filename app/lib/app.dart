@@ -1,14 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'models/user.dart';
+import 'services/auth_service.dart';
+import 'utils/app_theme.dart';
+import 'utils/app_routes.dart';
+
+// Screens
+import 'auth_wrapper.dart';
+import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/guard/staff_entry.dart';
+import 'screens/admin/admin_dashboard.dart';
+import 'screens/admin/admin_extras.dart'; // Import this
+
 import 'screens/guard/guard_home.dart';
 import 'screens/resident/resident_home.dart';
-import 'screens/admin/admin_dashboard.dart';
-import 'services/auth_service.dart';
-import 'services/firestore_service.dart';
-import 'services/notification_service.dart';
-import 'screens/splash_screen.dart';
+import 'screens/guard/add_visitor.dart';
+import 'screens/guard/scan_pass.dart';
+import 'screens/guard/visitor_status.dart';
+import 'screens/admin/user_management.dart';
+import 'screens/admin/notice_admin.dart';
+import 'screens/admin/analytics_dashboard.dart';
+import 'screens/resident/approval_screen.dart';
+import 'screens/resident/visitor_history.dart';
+import 'screens/resident/guest_pass_screen.dart';
+import 'screens/resident/my_pass.dart';
+import 'screens/resident/household_screen.dart';
+import 'screens/resident/househelp_screen.dart'; // Added
+import 'screens/resident/notice_list.dart';
+import 'screens/resident/complaint_list.dart';
+import 'screens/resident/service_directory.dart';
+import 'screens/resident/sos_screen.dart';
+
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -17,82 +39,50 @@ class CrescentGateApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authStateProvider);
+    // Watch auth state to trigger rebuilds if necessary
+    ref.watch(authStateProvider);
 
     return MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Crescent Gate',
-      debugShowCheckedModeBanner: false, // Clean look
-      
-      // 🚫 DISABLE LIGHT THEME COMPLETELY
-      theme: ThemeData.dark().copyWith(
-        brightness: Brightness.dark,
-        primaryColor: Colors.indigo,
-        scaffoldBackgroundColor: const Color(0xFF000000), // PITCH BLACK for max contrast
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.darkTheme,
+      themeMode: ThemeMode.dark,
+      // Named Routes
+      initialRoute: AppRoutes.splash,
+      routes: {
+        AppRoutes.splash: (context) => const SplashScreen(),
+        AppRoutes.login: (context) => const LoginScreen(),
+        AppRoutes.authWrapper: (context) => const AuthWrapper(),
         
-        // Text Themes - FORCE WHITE
-        textTheme: const TextTheme(
-          bodyLarge: TextStyle(color: Colors.white, fontSize: 16),
-          bodyMedium: TextStyle(color: Colors.white, fontSize: 14),
-          bodySmall: TextStyle(color: Colors.white70, fontSize: 12),
-          titleLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
-          titleMedium: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-        ),
+        // Admin Routes
+        AppRoutes.adminDashboard: (context) => const AdminDashboard(),
+        AppRoutes.userManagement: (context) => const UserManagementScreen(),
+        AppRoutes.noticeAdmin: (context) => const NoticeAdminScreen(),
+        AppRoutes.analytics: (context) => const AnalyticsDashboard(),
+        AppRoutes.complaints: (context) => const ComplaintAdminScreen(), 
+        AppRoutes.serviceProviders: (context) => const ServiceProviderAdminScreen(),
         
-        // App Bar
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF121212), // Slightly lighter than black
-          foregroundColor: Colors.white,
-          elevation: 0,
-          titleTextStyle: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-          iconTheme: IconThemeData(color: Colors.white),
-        ),
+        // Guard Routes
+        AppRoutes.guardHome: (context) => const GuardHome(),
+        AppRoutes.addVisitor: (context) => const AddVisitorScreen(),
+        AppRoutes.scanPass: (context) => const ScanPassScreen(),
+        AppRoutes.visitorStatus: (context) => const VisitorStatusScreen(),
+        AppRoutes.staffEntry: (context) => const StaffEntryScreen(),
         
-        // Cards
-        cardTheme: CardThemeData(
-          color: const Color(0xFF1E1E1E), // Standard Dark Grey Card
-          elevation: 4,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: Colors.white12, width: 1), // Subtle border for definition
-          ),
-        ),
-        
-        // Inputs
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: const Color(0xFF2C2C2C),
-          labelStyle: const TextStyle(color: Colors.white70),
-          hintStyle: const TextStyle(color: Colors.white38),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.white24),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.white24),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.indigoAccent, width: 2),
-          ),
-          prefixIconColor: Colors.white70,
-          suffixIconColor: Colors.white70,
-        ),
-        
-        
-        // Bottom Sheet
-        bottomSheetTheme: const BottomSheetThemeData(
-          backgroundColor: Color(0xFF1E1E1E),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-        ),
-      ),
-      
-      // FORCE DARK MODE ALWAYS
-      themeMode: ThemeMode.dark, 
-      home: const SplashScreen(), // 🌟 Set Initial Route to Splash
+        // Resident Routes
+        AppRoutes.residentHome: (context) => const ResidentHome(),
+        AppRoutes.approval: (context) => const ApprovalScreen(),
+        AppRoutes.visitorHistory: (context) => const VisitorHistoryScreen(),
+        AppRoutes.guestPass: (context) => const GuestPassScreen(),
+        AppRoutes.myPass: (context) => const MyPassScreen(),
+        AppRoutes.household: (context) => const HouseholdScreen(),
+        AppRoutes.househelp: (context) => const HousehelpScreen(),
+        AppRoutes.notices: (context) => const NoticeListScreen(),
+        AppRoutes.complaintList: (context) => const ComplaintListScreen(),
+        AppRoutes.serviceDirectory: (context) => const ServiceDirectoryScreen(),
+        AppRoutes.sos: (context) => const SosScreen(),
+      },
     );
   }
 }

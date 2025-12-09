@@ -3,6 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user.dart';
 import 'add_user_dialog.dart';
+import '../../widgets/confirmation_dialog.dart';
+import '../../widgets/empty_state.dart';
+import '../../utils/app_constants.dart';
+import '../../utils/haptic_helper.dart';
 
 class UserManagementScreen extends ConsumerStatefulWidget {
   const UserManagementScreen({super.key});
@@ -30,31 +34,22 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
   }
 
   void _deleteUser(AppUser user) async {
-    final confirm = await showDialog<bool>(
+    final confirm = await ConfirmationDialog.confirmDelete(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete User'),
-        content: Text('Delete ${user.name}? This cannot be undone.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      itemName: user.name,
     );
 
-    if (confirm == true) {
+    if (confirm) {
       try {
-        await ref.read(firestoreServiceProvider).deleteUser(user.uid);
+        await ref.read(firestoreServiceProvider).deleteUser(user.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User deleted')));
+          HapticHelper.mediumImpact();
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ User deleted'), backgroundColor: Colors.green));
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+          HapticHelper.heavyImpact();
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Error: $e'), backgroundColor: Colors.red));
         }
       }
     }
@@ -72,28 +67,21 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
             icon: const Icon(Icons.delete_sweep, color: Colors.orange),
             tooltip: 'Reset Data',
             onPressed: () async {
-              final confirm = await showDialog<bool>(
+              final confirm = await ConfirmationDialog.show(
                 context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('⚠️ RESET DATA'),
-                  content: const Text(
-                      'This will DELETE ALL USERS except Admins, Guards, and Resident A-101.\n\nThis action cannot be undone.'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('DELETE ALL'),
-                    ),
-                  ],
-                ),
+                title: '⚠️ RESET DATA',
+                message: 'This will DELETE ALL USERS except Admins, Guards, and Resident A-101.\n\nThis action cannot be undone.',
+                confirmText: 'DELETE ALL',
+                confirmColor: Colors.red,
+                icon: Icons.delete_forever,
               );
 
-              if (confirm == true) {
+              if (confirm) {
                 await ref.read(firestoreServiceProvider).cleanupNonEssentialUsers();
                 if (context.mounted) {
+                  HapticHelper.heavyImpact();
                   ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Cleanup Complete. Only Admin, Guards, A-101 remain.')));
+                      const SnackBar(content: Text('✅ Cleanup Complete. Only Admin, Guards, A-101 remain.'), backgroundColor: Colors.green));
                 }
               }
             },
@@ -119,21 +107,21 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                     onSelectionChanged: (Set<String> newSelection) {
                       setState(() => _selectedRole = newSelection.first);
                     },
-                    style: ButtonStyle(
-                      visualDensity: VisualDensity.compact,
-                      backgroundColor: MaterialStateProperty.resolveWith<Color>(
-                        (Set<MaterialState> states) {
-                          if (states.contains(MaterialState.selected)) return Colors.indigo;
-                          return Theme.of(context).cardTheme.color!;
-                        },
+                      style: ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        backgroundColor: WidgetStateProperty.resolveWith<Color>(
+                          (Set<WidgetState> states) {
+                            if (states.contains(WidgetState.selected)) return Colors.white;
+                            return Theme.of(context).cardTheme.color!;
+                          },
+                        ),
+                        foregroundColor: WidgetStateProperty.resolveWith<Color>(
+                          (Set<WidgetState> states) {
+                            if (states.contains(WidgetState.selected)) return Colors.white;
+                            return Colors.grey;
+                          },
+                        ),
                       ),
-                      foregroundColor: MaterialStateProperty.resolveWith<Color>(
-                        (Set<MaterialState> states) {
-                          if (states.contains(MaterialState.selected)) return Colors.white;
-                          return Colors.grey;
-                        },
-                      ),
-                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -174,7 +162,13 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                   ).toList();
                 }
 
-                if (users.isEmpty) return const Center(child: Text('No users found', style: TextStyle(color: Colors.white54)));
+                if (users.isEmpty) {
+                  return EmptyState(
+                  icon: Icons.person_off,
+                  title: 'No Users Found',
+                  message: 'No ${_selectedRole}s match your search',
+                );
+                }
 
                 return ListView.builder(
                   itemCount: users.length,
@@ -187,7 +181,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                       color: Theme.of(context).cardTheme.color,
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: Colors.indigo.shade900,
+                          backgroundColor: Colors.white10,
                           child: Text(
                             user.name.isNotEmpty ? user.name[0].toUpperCase() : '?', 
                             style: const TextStyle(color: Colors.white)
@@ -204,7 +198,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              icon: const Icon(Icons.edit, color: Colors.white), // Changed color
                               onPressed: () => _showEditUserDialog(user),
                             ),
                             IconButton(
@@ -226,8 +220,8 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
         onPressed: _showAddUserDialog,
         icon: const Icon(Icons.add),
         label: const Text('Add User'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
       ),
     );
   }
@@ -244,28 +238,34 @@ class _EditUserDialog extends ConsumerStatefulWidget {
 class _EditUserDialogState extends ConsumerState<_EditUserDialog> {
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
-  late TextEditingController _flatController;
-  late TextEditingController _wingController;
+  late TextEditingController _emailController;
   late TextEditingController _familyMemberController;
+  final _formKey = GlobalKey<FormState>();
+  
   List<String> _familyMembers = [];
+  String? _selectedWing;
+  String? _selectedFlat;
+  String? _selectedUserType; // Added
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.user.name);
     _phoneController = TextEditingController(text: widget.user.phone);
-    _flatController = TextEditingController(text: widget.user.flatNumber ?? '');
-    _wingController = TextEditingController(text: widget.user.wing ?? '');
+    _emailController = TextEditingController(text: widget.user.email); // Actual email
     _familyMemberController = TextEditingController();
     _familyMembers = List.from(widget.user.familyMembers ?? []);
+    
+    _selectedWing = widget.user.wing;
+    _selectedFlat = widget.user.flatNumber;
+    _selectedUserType = widget.user.userType; // Added
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
-    _flatController.dispose();
-    _wingController.dispose();
+    _emailController.dispose();
     _familyMemberController.dispose();
     super.dispose();
   }
@@ -294,81 +294,161 @@ class _EditUserDialogState extends ConsumerState<_EditUserDialog> {
     final isResident = widget.user.role == 'resident';
 
     return AlertDialog(
-      title: const Text('Edit User'),
+      title: const Row(
+        children: [
+          Icon(Icons.edit, color: Colors.white),
+          SizedBox(width: 8),
+          Text('Edit User', style: TextStyle(color: Colors.white)),
+        ],
+      ),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Name')),
-            const SizedBox(height: 8),
-            TextField(controller: _phoneController, decoration: const InputDecoration(labelText: 'Phone')),
-            
-            if (isResident) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(child: TextField(controller: _wingController, decoration: const InputDecoration(labelText: 'Wing'))),
-                  const SizedBox(width: 8),
-                  Expanded(child: TextField(controller: _flatController, decoration: const InputDecoration(labelText: 'Flat No'))),
-                ],
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: 'Name', prefixIcon: Icon(Icons.person)),
+                validator: (v) => v!.isEmpty ? 'Name Required' : null,
               ),
-              const SizedBox(height: 16),
-              const Text('Family Members:', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              
-              // Family Members List
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: _familyMembers.asMap().entries.map((entry) {
-                  return Chip(
-                    label: Text(entry.value),
-                    onDeleted: () => _removeFamilyMember(entry.key),
-                    deleteIcon: const Icon(Icons.close, size: 18),
-                  );
-                }).toList(),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _phoneController,
+                decoration: const InputDecoration(labelText: 'Phone', prefixIcon: Icon(Icons.phone)),
+                keyboardType: TextInputType.phone,
+                validator: (v) => v!.length < 10 ? 'Invalid Phone' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _emailController,
+                decoration: const InputDecoration(
+                  labelText: 'Email (⚠️ Changing may affect login)', 
+                  prefixIcon: Icon(Icons.email),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                validator: (v) => v!.contains('@') ? null : 'Invalid email',
               ),
               
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _familyMemberController,
-                      decoration: const InputDecoration(hintText: 'Add member name', isDense: true),
+              if (isResident) ...[
+                const SizedBox(height: 12),
+                const Divider(),
+                const Text('Residence Info', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                const SizedBox(height: 8),
+                
+                // User Type (Owner/Tenant)
+                DropdownButtonFormField<String>(
+                  // ignore: deprecated_member_use
+                  value: _selectedUserType ?? 'owner', // Default to owner if null
+                  decoration: const InputDecoration(labelText: 'Resident Type'),
+                  items: const [
+                    DropdownMenuItem(value: 'owner', child: Text('Owner')),
+                    DropdownMenuItem(value: 'tenant', child: Text('Tenant')),
+                  ],
+                  onChanged: (v) => setState(() => _selectedUserType = v),
+                ),
+                const SizedBox(height: 12),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        // ignore: deprecated_member_use
+                        value: _selectedWing != null && ['A', 'B'].contains(_selectedWing) ? _selectedWing : null,
+                        decoration: const InputDecoration(labelText: 'Wing'),
+                        items: AppConstants.wings.map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
+                        onChanged: (v) => setState(() => _selectedWing = v),
+                        validator: (v) => isResident && v == null ? 'Required' : null,
+                      ),
                     ),
-                  ),
-                  IconButton(onPressed: _addFamilyMember, icon: const Icon(Icons.add_circle, color: Colors.blue)),
-                ],
-              ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        // ignore: deprecated_member_use
+                        value: _selectedFlat != null && _selectedFlat!.length == 4 ? _selectedFlat : null,
+                        decoration: const InputDecoration(labelText: 'Flat'),
+                        items: _generateFlatNumbers(),
+                        onChanged: (v) => setState(() => _selectedFlat = v),
+                        validator: (v) => isResident && v == null ? 'Required' : null,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text('Family Members:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                
+                // Family Members List
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: _familyMembers.asMap().entries.map((entry) {
+                    return Chip(
+                      label: Text(entry.value),
+                      onDeleted: () => _removeFamilyMember(entry.key),
+                      deleteIcon: const Icon(Icons.close, size: 18),
+                      backgroundColor: Colors.white10,
+                    );
+                  }).toList(),
+                ),
+                
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _familyMemberController,
+                        decoration: const InputDecoration(hintText: 'Add member name', isDense: true, prefixIcon: Icon(Icons.person_add)),
+                      ),
+                    ),
+                    IconButton(onPressed: _addFamilyMember, icon: const Icon(Icons.add_circle, color: Colors.blue)),
+                  ],
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         ElevatedButton(
           onPressed: () async {
-            final updatedUser = AppUser(
-              uid: widget.user.uid,
-              name: _nameController.text,
-              phone: _phoneController.text, // Correct field
-              role: widget.user.role,
-              flatNumber: isResident ? _flatController.text : widget.user.flatNumber,
-              wing: isResident ? _wingController.text : widget.user.wing,
-              userType: widget.user.userType,
-              ownerId: widget.user.ownerId,
-              familyMembers: _familyMembers,
-              createdAt: widget.user.createdAt,
-            );
+            if (_formKey.currentState!.validate()) {
+              final updatedUser = AppUser(
+                id: widget.user.id,
+                email: _emailController.text, // Updated email
+                name: _nameController.text,
+                phone: _phoneController.text,
+                role: widget.user.role,
+                flatNumber: isResident ? _selectedFlat : widget.user.flatNumber,
+                wing: isResident ? _selectedWing : widget.user.wing,
+                userType: isResident ? _selectedUserType : widget.user.userType, // Updated
+                ownerId: widget.user.ownerId,
+                familyMembers: _familyMembers,
+                createdAt: widget.user.createdAt,
+              );
 
-            await ref.read(firestoreServiceProvider).updateUser(updatedUser);
-            if (mounted) Navigator.pop(context);
+              await ref.read(firestoreServiceProvider).updateUser(updatedUser);
+              if (!context.mounted) return;
+              Navigator.pop(context);
+            }
           },
-          child: const Text('Save'),
+          child: const Text('Save Changes'),
         ),
       ],
     );
+  }
+
+  // Helper to generate flat numbers (Floors 1-12, Flats 01-04)
+  List<DropdownMenuItem<String>> _generateFlatNumbers() {
+    final List<DropdownMenuItem<String>> items = [];
+    for (int floor = 1; floor <= 12; floor++) {
+      for (int flat = 1; flat <= 4; flat++) {
+        final flatNum = '${floor.toString().padLeft(2, '0')}0$flat';
+        items.add(DropdownMenuItem(value: flatNum, child: Text(flatNum)));
+      }
+    }
+    return items;
   }
 }

@@ -1,47 +1,103 @@
 # Crescent Gate
 
-A premium, modern Society Management System built with **Flutter** & **Firebase**.
+**Crescent Gate** is a modern, comprehensive **Society Management System** built with **Flutter** and **Supabase**. It streamlines communication between residents, guards, and administration, ensuring a secure and efficient living environment.
 
-## ✨ Features
-*   **Role-Based Access**: Residents, Guards, and Admins.
-*   **Digital Gate Pass**: Holographic QR codes for guest entry.
-*   **Visitor Management**: Real-time approvals with glassmorphic UI.
-*   **SOS Alert**: Instant emergency notifications for security.
-*   **Notice Board**: Admin announcements pushed to all residents.
+![Crescent Gate App](https://via.placeholder.com/800x400?text=Crescent+Gate+Preview)
 
-## 🚀 Setup Instructions (Important)
-This project uses Firebase for the backend. To run it, you must provide your own Firebase configuration.
+## ✨ Key Features
 
-### 1. Prerequisites
-*   [Flutter SDK](https://flutter.dev/docs/get-started/install) installed.
-*   [Firebase Account](https://firebase.google.com/).
+### 👤 For Residents
+- **Visitor Management:** Receive instant notifications (Push + Realtime) for visitors. Approve/Reject entry with one tap.
+- **Visitor History:** Track all entries and exits with a synced calendar view for the entire flat.
+- **Daily Help:** Manage maids, cooks, and drivers. View their daily attendance.
+- **Household Management:** Add family members. Everyone in the flat stays synced.
+- **Complaints:** Raise issues (plumbing, electrical) and track status with admin chat.
+- **Gate Pass:** Generate digital passes for guests.
+- **SOS Alert:** Emergency button that instantly notifies all guards and admins.
+- **Notices:** Digital notice board for society announcements.
 
-### 2. Configure Firebase
-1.  Create a **New Project** in [Firebase Console](https://console.firebase.google.com/).
-2.  **Android Setup**:
-    *   Add an Android App with package name: `com.crescentgate.app`
-    *   Download `google-services.json`.
-    *   Place it in: `app/android/app/google-services.json`.
-3.  **iOS Setup** (Optional):
-    *   Add an iOS App with Bundle ID: `com.crescentgate.app`
-    *   Download `GoogleService-Info.plist`.
-    *   Place it in: `app/ios/Runner/GoogleService-Info.plist`.
-4.  **FlutterFire Configuration**:
-    *   Run this command in the `app` folder to generate the Dart config:
-        ```bash
-        flutterfire configure
-        ```
-    *   This will create `lib/firebase_options.dart`.
+### 🛡️ For Guards
+- **Fast Visitor Entry:** Add visitors quickly with photo capture.
+- **Realtime Approvals:** See resident approval status instantly.
+- **Staff Attendance:** Mark entry/exit for daily help staff.
+- **Verify Passes:** Scan guest passes.
 
-### 3. Run the App
-```bash
-cd app
-flutter pub get
-flutter run
-```
-
-## 👥 Usage
-Please refer to [USER_MANUAL.md](USER_MANUAL.md) for detailed instructions on how to use the app, create the first admin user, and manage the society.
+### 🔧 For Admins
+- **Dashboard:** Overview of society stats (Residents, Visitors, Complaints).
+- **User Management:** Add/Remove residents and guards.
+- **Broadcast Notices:** Send alerts to all residents.
+- **Resolve Complaints:** Manage and resolve resident issues.
 
 ---
-*Built with Flutter 3.x*
+
+## 🛠️ Technology Stack
+
+- **Frontend:** Flutter (Mobile App for iOS & Android)
+- **Backend:** Supabase (PostgreSQL, Auth, Realtime, Storage)
+- **State Management:** Flutter Riverpod
+- **Notifications:** OneSignal + Supabase Realtime (Dual Delivery System)
+
+---
+
+## 🚀 Deployment Guide
+
+Follow these steps to set up the project from scratch.
+
+### 1️⃣ Database Setup (Supabase)
+
+The entire database schema, security policies (RLS), and initial seed data are contained in a single file: **`DEPLOYMENT_MASTER.sql`**.
+
+1.  Create a new project in [Supabase](https://supabase.com).
+2.  Navigate to the **SQL Editor** in the dashboard.
+3.  Open the `DEPLOYMENT_MASTER.sql` file from this repository.
+4.  Copy and paste the content into the SQL Editor.
+5.  **Run** the script.
+
+> **Note:** The script includes default users (Admin, Resident, Guard) with the password `123456`.
+
+### 2️⃣ App Configuration
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/yourusername/crescent-gate.git
+    cd crescent-gate/app
+    ```
+
+2.  **Install Dependencies:**
+    ```bash
+    flutter pub get
+    ```
+
+3.  **Configure Environment:**
+    Open `lib/supabase_config.dart` and update it with your Supabase credentials and OneSignal keys:
+    ```dart
+    class SupabaseConfig {
+      static const String url = 'YOUR_SUPABASE_URL';
+      static const String anonKey = 'YOUR_SUPABASE_ANON_KEY';
+      static const String oneSignalAppId = 'YOUR_ONESIGNAL_APP_ID';
+      static const String oneSignalRestApiKey = 'YOUR_ONESIGNAL_REST_KEY';
+    }
+    ```
+
+4.  **Run the App:**
+    ```bash
+    flutter run --release
+    ```
+
+---
+
+## 🔐 Default Credentials
+
+Use these credentials to test the different roles:
+
+| Role | Email | Password |
+|------|-------|----------|
+| **Admin** | `crescentlandmark@gmail.com` | `123456` |
+| **Resident** (A-1101) | `aryanjyadav@gmail.com` | `123456` |
+| **Guard** (Wing A) | `guardawing@gmail.com` | `123456` |
+
+---
+
+## 📜 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

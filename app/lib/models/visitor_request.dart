@@ -1,4 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+
+DateTime _parseDate(dynamic val) {
+  if (val == null) return DateTime.now();
+  if (val is String) return DateTime.parse(val);
+  return DateTime.now();
+}
 
 class VisitorRequest {
   final String id;
@@ -6,12 +11,15 @@ class VisitorRequest {
   final String visitorPhone;
   final String photoUrl;
   final String purpose;
+  final String wing;
   final String flatNumber;
   final String residentId;
   final String guardId;
-  final String status; // 'pending', 'approved', 'rejected'
+  String status; // Mutable for optimistic updates
   final DateTime createdAt;
   final DateTime? approvedAt;
+  final DateTime? entryTime;
+  final DateTime? exitTime;
 
   VisitorRequest({
     required this.id,
@@ -19,48 +27,59 @@ class VisitorRequest {
     required this.visitorPhone,
     required this.photoUrl,
     required this.purpose,
+    required this.wing,
     required this.flatNumber,
     required this.residentId,
     required this.guardId,
     required this.status,
     required this.createdAt,
     this.approvedAt,
+    this.entryTime,
+    this.exitTime,
   });
 
   factory VisitorRequest.fromMap(Map<String, dynamic> data, String id) {
     return VisitorRequest(
       id: id,
-      visitorName: data['visitorName'] ?? '',
-      visitorPhone: data['visitorPhone'] ?? '',
-      photoUrl: data['photoUrl'] ?? '',
+      visitorName: data['visitor_name'] ?? data['visitorName'] ?? '',
+      visitorPhone: data['visitor_phone'] ?? data['visitorPhone'] ?? '',
+      photoUrl: data['photo_url'] ?? data['photoUrl'] ?? '',
       purpose: data['purpose'] ?? '',
-      flatNumber: data['flatNumber'] ?? '',
-      residentId: data['residentId'] ?? '',
-      guardId: data['guardId'] ?? '',
+      wing: data['wing'] ?? '',
+      flatNumber: data['flat_number'] ?? data['flatNumber'] ?? '',
+      residentId: data['resident_id'] ?? data['residentId'] ?? '',
+      guardId: data['guard_id'] ?? data['guardId'] ?? '',
       status: data['status'] ?? 'pending',
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      approvedAt: (data['approvedAt'] as Timestamp?)?.toDate(),
+      createdAt: _parseDate(data['created_at'] ?? data['createdAt']),
+      approvedAt: data['approved_at'] != null ? _parseDate(data['approved_at']) : null,
+      entryTime: data['entry_time'] != null ? _parseDate(data['entry_time']) : null,
+      exitTime: data['exit_time'] != null ? _parseDate(data['exit_time']) : null,
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'visitorName': visitorName,
-      'visitorPhone': visitorPhone,
-      'photoUrl': photoUrl,
+      'visitor_name': visitorName,
+      'visitor_phone': visitorPhone,
+      'photo_url': photoUrl,
       'purpose': purpose,
-      'flatNumber': flatNumber,
-      'residentId': residentId,
-      'guardId': guardId,
+      'wing': wing,
+      'flat_number': flatNumber,
+      'resident_id': residentId,
+      'guard_id': guardId,
       'status': status,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'approvedAt': approvedAt != null ? Timestamp.fromDate(approvedAt!) : null,
+      'created_at': createdAt.toIso8601String(),
+      'approved_at': approvedAt?.toIso8601String(),
+      'entry_time': entryTime?.toIso8601String(),
+      'exit_time': exitTime?.toIso8601String(),
     };
   }
   
   VisitorRequest copyWith({
     String? status,
     DateTime? approvedAt,
+    DateTime? entryTime,
+    DateTime? exitTime,
   }) {
     return VisitorRequest(
       id: id,
@@ -68,12 +87,15 @@ class VisitorRequest {
       visitorPhone: visitorPhone,
       photoUrl: photoUrl,
       purpose: purpose,
+      wing: wing,
       flatNumber: flatNumber,
       residentId: residentId,
       guardId: guardId,
       status: status ?? this.status,
       createdAt: createdAt,
       approvedAt: approvedAt ?? this.approvedAt,
+      entryTime: entryTime ?? this.entryTime,
+      exitTime: exitTime ?? this.exitTime,
     );
   }
 }

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../../models/visitor_request.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/visitor_card.dart';
+import '../../widgets/empty_state.dart';
 
 class VisitorStatusScreen extends ConsumerStatefulWidget {
   const VisitorStatusScreen({super.key});
@@ -25,49 +27,65 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              RadioListTile<String>(
+              ListTile(
                 title: const Text('All'),
-                value: 'all',
-                groupValue: _statusFilter,
-                onChanged: (String? value) {
-                  setState(() {
-                    _statusFilter = value!;
-                  });
-                  Navigator.pop(context);
-                },
+                leading: Radio<String>(
+                  value: 'all',
+                  // ignore: deprecated_member_use
+                  groupValue: _statusFilter,
+                  // ignore: deprecated_member_use
+                  onChanged: (String? value) {
+                    setState(() {
+                      _statusFilter = value!;
+                    });
+                    Navigator.pop(context);
+                  },
+                ),
               ),
-              RadioListTile<String>(
+              ListTile(
                 title: const Text('Pending'),
-                value: 'pending',
-                groupValue: _statusFilter,
-                onChanged: (String? value) {
-                  setState(() {
-                    _statusFilter = value!;
-                  });
-                  Navigator.pop(context);
-                },
+                leading: Radio<String>(
+                  value: 'pending',
+                  // ignore: deprecated_member_use
+                  groupValue: _statusFilter,
+                  // ignore: deprecated_member_use
+                  onChanged: (String? value) {
+                    setState(() {
+                      _statusFilter = value!;
+                    });
+                    Navigator.pop(context);
+                  },
+                ),
               ),
-              RadioListTile<String>(
+              ListTile(
                 title: const Text('Approved'),
-                value: 'approved',
-                groupValue: _statusFilter,
-                onChanged: (String? value) {
-                  setState(() {
-                    _statusFilter = value!;
-                  });
-                  Navigator.pop(context);
-                },
+                leading: Radio<String>(
+                  value: 'approved',
+                  // ignore: deprecated_member_use
+                  groupValue: _statusFilter,
+                  // ignore: deprecated_member_use
+                  onChanged: (String? value) {
+                    setState(() {
+                      _statusFilter = value!;
+                    });
+                    Navigator.pop(context);
+                  },
+                ),
               ),
-              RadioListTile<String>(
+              ListTile(
                 title: const Text('Rejected'),
-                value: 'rejected',
-                groupValue: _statusFilter,
-                onChanged: (String? value) {
-                  setState(() {
-                    _statusFilter = value!;
-                  });
-                  Navigator.pop(context);
-                },
+                leading: Radio<String>(
+                  value: 'rejected',
+                  // ignore: deprecated_member_use
+                  groupValue: _statusFilter,
+                  // ignore: deprecated_member_use
+                  onChanged: (String? value) {
+                    setState(() {
+                      _statusFilter = value!;
+                    });
+                    Navigator.pop(context);
+                  },
+                ),
               ),
             ],
           ),
@@ -76,18 +94,28 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
     );
   }
 
+  late Stream<List<VisitorRequest>> _logsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _logsStream = ref.read(firestoreServiceProvider).getTodayVisitorLogs();
+  }
+
+  Future<void> _refreshLogs() async {
+    setState(() {
+      _logsStream = ref.read(firestoreServiceProvider).getTodayVisitorLogs();
+    });
+    // Wait a bit to show refresh spinner
+    await Future.delayed(const Duration(milliseconds: 500)); 
+  }
+
   @override
   Widget build(BuildContext context) {
-    final logsStream = ref.watch(firestoreServiceProvider).getTodayVisitorLogs();
-
     return Scaffold(
       // backgroundColor: Use default dark background
       body: RefreshIndicator(
-        onRefresh: () async {
-          // Refresh stream by invalidating provider
-          ref.invalidate(firestoreServiceProvider);
-          await Future.delayed(const Duration(milliseconds: 500));
-        },
+        onRefresh: _refreshLogs,
         child: CustomScrollView(
           slivers: [
             SliverAppBar(
@@ -112,9 +140,9 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: TextField(
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     hintText: 'Search by visitor name...',
-                    prefixIcon: const Icon(Icons.search),
+                    prefixIcon: Icon(Icons.search),
                     filled: true,
                     // Default theme fill color
                   ),
@@ -124,7 +152,7 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
             ),
             
             StreamBuilder<List<VisitorRequest>>(
-              stream: logsStream,
+              stream: _logsStream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   // 🌟 Shimmer Loading
@@ -159,7 +187,8 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
 
                 // 🔍 Apply Filters
                 logs = logs.where((log) {
-                  final matchesSearch = log.visitorName.toLowerCase().contains(_searchQuery);
+                  final matchesSearch = log.visitorName.toLowerCase().contains(_searchQuery) || 
+                                       log.flatNumber.toLowerCase().contains(_searchQuery);
                   final matchesStatus = _statusFilter == 'all' || log.status == _statusFilter;
                   
                   // 🕒 Date Filter: TODAY ONLY
@@ -172,32 +201,53 @@ class _VisitorStatusScreenState extends ConsumerState<VisitorStatusScreen> {
 
                 if (logs.isEmpty) {
                   return SliverFillRemaining(
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.search_off, size: 60, color: Colors.grey[700]),
-                          const SizedBox(height: 16),
-                          Text(
-                            _searchQuery.isEmpty && _statusFilter == 'all' ? 'No visitors yet today' : 'No results found',
-                            style: TextStyle(color: Colors.grey[500], fontSize: 16),
-                          ),
-                        ],
-                      ),
+                    child: EmptyState(
+                      icon: _searchQuery.isEmpty && _statusFilter == 'all' ? Icons.people_outline : Icons.search_off,
+                      title: _searchQuery.isEmpty && _statusFilter == 'all' ? 'No Visitors Today' : 'No Results Found',
+                      message: _searchQuery.isEmpty && _statusFilter == 'all' ? 'Visitor logs will appear here' : 'Try adjusting your filters',
                     ),
                   );
                 }
 
-                return SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final log = logs[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0, left: 16, right: 16),
-                        child: VisitorCard(request: log),
-                      );
-                    },
-                    childCount: logs.length,
+                return AnimationLimiter(
+                  child: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final log = logs[index];
+                        return AnimationConfiguration.staggeredList(
+                          position: index,
+                          duration: const Duration(milliseconds: 375),
+                          child: SlideAnimation(
+                            verticalOffset: 50.0,
+                            child: FadeInAnimation(
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0, left: 16, right: 16),
+                                 child: VisitorCard(
+                                  request: log,
+                                  showActions: true,
+                                  // Guards can ONLY mark exit, not approve/deny
+                                  onExit: () async {
+
+                                      // 1. Optimistic Update (Immediate UI Feedback)
+                                      setState(() {
+                                        log.status = 'exited';
+                                      });
+                                      
+                                      // 2. Perform Async Operation
+                                      await ref.read(firestoreServiceProvider).updateVisitorStatus(log.id, 'exited');
+                                      
+                                      // 3. Refresh Stream (Keep in Sync)
+                                      ref.invalidate(firestoreServiceProvider);
+                                  },
+
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                      childCount: logs.length,
+                    ),
                   ),
                 );
               },

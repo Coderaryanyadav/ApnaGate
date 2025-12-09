@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/extras.dart';
 import '../../services/firestore_service.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/loading_widgets.dart';
 
 class ServiceDirectoryScreen extends ConsumerWidget {
   const ServiceDirectoryScreen({super.key});
@@ -14,11 +16,15 @@ class ServiceDirectoryScreen extends ConsumerWidget {
       body: StreamBuilder<List<ServiceProvider>>(
         stream: ref.watch(firestoreServiceProvider).getServiceProviders(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData) return const LoadingList(message: 'Loading service providers...');
           final providers = snapshot.data!;
 
           if (providers.isEmpty) {
-            return const Center(child: Text('No providers listed yet'));
+            return const EmptyState(
+              icon: Icons.engineering,
+              title: 'No Service Providers',
+              message: 'Contact admin to add service providers',
+            );
           }
 
           return ListView.builder(
@@ -46,7 +52,14 @@ class ServiceDirectoryScreen extends ConsumerWidget {
                       ],
                     ],
                   ),
-                  subtitle: Text(provider.category, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(provider.category, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text(provider.phone, style: const TextStyle(fontSize: 14, color: Colors.indigo)),
+                    ],
+                  ),
                   trailing: IconButton(
                     onPressed: () => launchUrl(Uri.parse('tel:${provider.phone}')),
                     icon: const CircleAvatar(

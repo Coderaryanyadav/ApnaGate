@@ -7,6 +7,11 @@ import '../../models/visitor_request.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/notification_service.dart';
+import '../../utils/input_validator.dart';
+import '../../utils/haptic_helper.dart';
+import '../../utils/app_constants.dart';
+import '../../widgets/loading_widgets.dart';
 
 class AddVisitorScreen extends ConsumerStatefulWidget {
   const AddVisitorScreen({super.key});
@@ -21,12 +26,11 @@ class _AddVisitorScreenState extends ConsumerState<AddVisitorScreen> {
   final _phoneController = TextEditingController();
   final _flatController = TextEditingController();
   File? _imageFile;
-  bool _isLoading = false;
+  final bool _isLoading = false;
 
   // Selection State
-  String _selectedWing = 'A';
+  String _selectedWing = AppConstants.wings[0];
   String _selectedPurpose = 'Delivery';
-  final List<String> _purposes = ['Delivery', 'Guest', 'Cab', 'Service', 'Other'];
 
   Future<void> _pickImage() async {
     final pickedFile = await ImagePicker().pickImage(
@@ -45,7 +49,8 @@ class _AddVisitorScreenState extends ConsumerState<AddVisitorScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    HapticHelper.lightImpact();
+    LoadingOverlay.show(context, message: 'Creating visitor request...');
 
     try {
       final firestore = ref.read(firestoreServiceProvider);
@@ -70,27 +75,39 @@ class _AddVisitorScreenState extends ConsumerState<AddVisitorScreen> {
         visitorPhone: _phoneController.text.trim(),
         photoUrl: photoUrl,
         purpose: _selectedPurpose,
-        flatNumber: '$_selectedWing-$flat', // Store full address
-        residentId: residents.first.uid,
-        guardId: currentUser?.uid ?? '',
+        wing: _selectedWing, // ✅ Added wing
+        flatNumber: flat, // ✅ Changed to just flat number
+        residentId: residents.first.id,
+        guardId: currentUser?.id ?? '',
         status: 'pending',
         createdAt: DateTime.now(),
       );
 
       await firestore.createVisitorRequest(request);
 
+      // 🔔 Notify ALL residents of the flat (handled by notifyFlat)
+      await ref.read(notificationServiceProvider).notifyFlat(
+        wing: _selectedWing,
+        flatNumber: flat,
+        title: '🔔 New Visitor!',
+        message: '${request.visitorName} is waiting at $_selectedWing-$flat',
+      );
+
+      LoadingOverlay.hide();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Request Sent!'), backgroundColor: Colors.green));
+        HapticHelper.mediumImpact();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Request Sent & Resident Notified!'), backgroundColor: Colors.green, duration: Duration(seconds: 3)));
         Navigator.pop(context);
       }
     } catch (e) {
+      LoadingOverlay.hide();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.red));
+        HapticHelper.heavyImpact();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.red, duration: const Duration(seconds: 4)));
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -137,13 +154,14 @@ class _AddVisitorScreenState extends ConsumerState<AddVisitorScreen> {
                   Expanded(
                     flex: 1,
                     child: DropdownButtonFormField<String>(
+                      // ignore: deprecated_member_use
                       value: _selectedWing,
                       decoration: const InputDecoration(
                         labelText: 'Wing',
                         border: OutlineInputBorder(),
                         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                       ),
-                      items: ['A', 'B'].map((w) => DropdownMenuItem(value: w, child: Text(w, style: const TextStyle(fontWeight: FontWeight.bold)))).toList(),
+                      items: AppConstants.wings.map((w) => DropdownMenuItem(value: w, child: Text(w, style: const TextStyle(fontWeight: FontWeight.bold)))).toList(),
                       onChanged: (v) => setState(() => _selectedWing = v!),
                     ),
                   ),
@@ -174,7 +192,7 @@ class _AddVisitorScreenState extends ConsumerState<AddVisitorScreen> {
                   prefixIcon: Icon(Icons.person),
                   border: OutlineInputBorder(),
                 ),
-                validator: (v) => v!.isEmpty ? 'Required' : null,
+                validator: InputValidator.validateName,
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -185,13 +203,14 @@ class _AddVisitorScreenState extends ConsumerState<AddVisitorScreen> {
                   prefixIcon: Icon(Icons.phone),
                   border: OutlineInputBorder(),
                 ),
-                validator: (v) => v!.isEmpty ? 'Required' : null,
+                validator: InputValidator.validatePhone,
               ),
 
               const SizedBox(height: 24),
               
               // Purpose Dropdown with Emojis
               DropdownButtonFormField<String>(
+                // ignore: deprecated_member_use
                 value: _selectedPurpose,
                 decoration: const InputDecoration(
                   labelText: 'Purpose of Visit',
@@ -229,6 +248,7 @@ class _AddVisitorScreenState extends ConsumerState<AddVisitorScreen> {
             ],
           ),
         ),
+
       ),
     );
   }
