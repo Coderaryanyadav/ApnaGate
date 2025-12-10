@@ -121,8 +121,8 @@ StreamSubscription _startSupabaseStream(String userId, String token, FlutterLoca
               knownIds.add(id);
               
               final createdAt = DateTime.tryParse(visit['created_at'] ?? '') ?? DateTime(2000);
-              // Freshness check (45s) - Ultra Strict
-              final isFresh = createdAt.isAfter(DateTime.now().subtract(const Duration(seconds: 45)));
+              // Freshness check (40s) - Ultra Strict
+              final isFresh = createdAt.isAfter(DateTime.now().subtract(const Duration(seconds: 40)));
 
               // Double check persistence immediately before showing
               final alreadyAlerted = await PersistenceHelper.loadAlertedIds();
