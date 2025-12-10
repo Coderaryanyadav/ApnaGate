@@ -176,7 +176,7 @@ class FirestoreService {
   }
   
   Future<void> updateProviderStatus(String providerId, String status, {String? actorId, String? ownerId}) async {
-    final now = DateTime.now().toIso8601String();
+    final now = DateTime.now().toUtc().toIso8601String();
     
     // 1. Update Provider Status
     await _client.from('service_providers').update({
@@ -409,8 +409,8 @@ class FirestoreService {
   Future<void> updateVisitorStatus(String id, String status) async {
     await _client.from('visitors').update({
       'status': status,
-      if (status == 'inside' || status == 'entered') 'entry_time': DateTime.now().toIso8601String(),
-      if (status == 'exited') 'exit_time': DateTime.now().toIso8601String(),
+      if (status == 'inside' || status == 'entered') 'entry_time': DateTime.now().toUtc().toIso8601String(),
+      if (status == 'exited') 'exit_time': DateTime.now().toUtc().toIso8601String(),
     }).eq('id', id);
   }
 
@@ -772,8 +772,8 @@ class FirestoreService {
     // 1. Update Status
     await _client.from('daily_help').update({
       'is_present': isEntry,
-      'last_entry_time': isEntry ? DateTime.now().toIso8601String() : null,
-      'last_exit_time': !isEntry ? DateTime.now().toIso8601String() : null,
+      'last_entry_time': isEntry ? DateTime.now().toUtc().toIso8601String() : null,
+      'last_exit_time': !isEntry ? DateTime.now().toUtc().toIso8601String() : null,
     }).eq('id', staffId);
 
     // 2. Log History
@@ -781,7 +781,7 @@ class FirestoreService {
       'staff_id': staffId,
       'owner_id': ownerId,
       'action': isEntry ? 'entry' : 'exit',
-      'timestamp': DateTime.now().toIso8601String(),
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
     });
   }
 

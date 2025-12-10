@@ -65,17 +65,18 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
 
   Future<void> _triggerLocalSOS(Map<String, dynamic> alert) async { // Added
     const androidDetails = AndroidNotificationDetails(
-      'crescent_gate_alarm_v2', 
+      'apna_gate_alarm_v2', // Match channel used elsewhere
       'Critical Alerts',
       importance: Importance.max,
       priority: Priority.max,
       playSound: true,
       sound: RawResourceAndroidNotificationSound('notification'),
+      fullScreenIntent: true, // Make it pop
     );
     const details = NotificationDetails(android: androidDetails);
     
     await _localNotifications.show(
-      999, // Fixed ID for SOS
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
       '🚨 SOS ALERT!', 
       'Emergency at ${alert['wing'] ?? 'Unknown'}-${alert['flat_number'] ?? alert['flatNumber'] ?? 'Unknown'}', 
       details,

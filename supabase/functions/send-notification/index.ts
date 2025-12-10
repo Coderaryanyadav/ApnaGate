@@ -66,10 +66,11 @@ serve(async (req) => {
             ]
         } else if (type === 'sos') {
             // SOS: Notify ALL guards and admins
+            payload.android_channel_id = 'apna_gate_alarm_v2'; // High Priority Channel
             payload.filters = [
-                { field: 'tag', key: 'role', 'relation': '=', 'value': 'guard' },
+                { field: 'tag', key: 'role', relation: '=', value: 'guard' },
                 { operator: 'OR' },
-                { field: 'tag', key: 'role', 'relation': '=', 'value': 'admin' }
+                { field: 'tag', key: 'role', relation: '=', value: 'admin' }
             ]
             // High priority SOS settings
             payload.priority = 10
