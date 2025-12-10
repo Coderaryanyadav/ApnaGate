@@ -7,7 +7,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <application
-        android:label="CrescentGate"
+        android:label="ApnaGate"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <activity

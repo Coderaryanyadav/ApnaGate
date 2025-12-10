@@ -5,7 +5,7 @@ class SupabaseConfig {
   
   // OneSignal configuration
   static const String oneSignalAppId = '5e9deb0b-b39a-4259-ae19-5f9d05840b03'; 
-  static const String oneSignalRestApiKey = 'os_v2_app_l2o6wc5ttjbftlqzl6oqlbalanhszkzjsonedfef37jndyxeqtwymoutqxsfvjoz2ro57cimgkiunxrd6pgyyuid6ajs2cfr4muvrji';
+  // static const String oneSignalRestApiKey = 'REMOVED_FOR_SECURITY_USE_EDGE_FUNCTIONS';
 
   // Aliases for compatibility with existing code
   static const String url = supabaseUrl;

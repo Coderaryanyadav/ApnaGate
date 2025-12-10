@@ -43,11 +43,11 @@ class ComplaintAdminScreen extends ConsumerWidget {
             itemBuilder: (context, index) {
               final c = complaints[index];
               return Card(
-                color: Colors.white.withOpacity(0.05), // Use withOpacity for safety if withValues fails versions
+                color: Colors.white.withValues(alpha: 0.05), // Use withOpacity for safety if withValues fails versions
                 margin: const EdgeInsets.only(bottom: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: Colors.white.withOpacity(0.1), width: 1),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 1),
                 ),
                 child: ListTile(
                   leading: const CircleAvatar(
@@ -261,12 +261,12 @@ class ServiceProviderAdminScreen extends ConsumerWidget {
             itemBuilder: (context, index) {
               final p = providers[index];
               return Card(
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
                 margin: const EdgeInsets.only(bottom: 16),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16), 
-                  side: BorderSide(color: Colors.white.withOpacity(0.1))
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.1))
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(8.0),

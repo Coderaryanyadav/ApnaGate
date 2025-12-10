@@ -38,7 +38,7 @@ serve(async (req) => {
             app_id: ONESIGNAL_APP_ID,
             headings: { en: title },
             contents: { en: message },
-            android_channel_id: 'crescent_gate_alarm_v1',
+            android_channel_id: 'apna_gate_alarm_v1',
             priority: 10,
             ttl: 3600,
             content_available: true,
@@ -64,6 +64,17 @@ serve(async (req) => {
                 { operator: 'AND' },
                 { field: 'tag', key: 'flat_number', relation: '=', value: flatNumber.toUpperCase() }
             ]
+        } else if (type === 'sos') {
+            // SOS: Notify ALL guards and admins
+            payload.filters = [
+                { field: 'tag', key: 'role', 'relation': '=', 'value': 'guard' },
+                { operator: 'OR' },
+                { field: 'tag', key: 'role', 'relation': '=', 'value': 'admin' }
+            ]
+            // High priority SOS settings
+            payload.priority = 10
+            payload.ios_sound = 'notification.wav'
+            payload.android_sound = 'notification'
         } else {
             return new Response(JSON.stringify({ error: 'Invalid notification type' }), {
                 status: 400,

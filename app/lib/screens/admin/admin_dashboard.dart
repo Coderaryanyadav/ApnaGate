@@ -34,7 +34,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
       final authUser = ref.read(authServiceProvider).currentUser;
       
       if (authUser == null) {
-        if (mounted) Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+        if (mounted) await Navigator.of(context).pushReplacementNamed(AppRoutes.login);
         return;
       }
 
@@ -45,7 +45,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
       if (profile == null || profile.role != 'admin') {
         debugPrint('⛔ Access Denied: User ${authUser.id} is not admin. Role: ${profile?.role}');
         if (mounted) {
-           showDialog(
+           await showDialog(
              context: context,
              barrierDismissible: false,
              builder: (ctx) => AlertDialog(

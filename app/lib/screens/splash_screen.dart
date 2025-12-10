@@ -81,7 +81,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
               child: Column(
                 children: [
                    Text(
-                    'CRESCENT GATE',
+                    'APNAGATE',
                     style: TextStyle(
                       fontFamily: 'Roboto', // Or your custom font
                       fontSize: 32,

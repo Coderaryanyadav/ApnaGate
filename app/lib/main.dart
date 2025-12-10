@@ -33,7 +33,7 @@ void main() async {
     // 🛡️ Wrap app with ErrorBoundary to catch all errors
     runApp(
       const ErrorBoundary(
-        child: ProviderScope(child: CrescentGateApp()),
+        child: ProviderScope(child: ApnaGateApp()),
       ),
     );
     
@@ -47,13 +47,13 @@ void main() async {
     // Log all uncaught errors
     debugPrint('🔴 Uncaught error: $error');
     debugPrint('Stack trace: $stack');
-    // TODO: Send to crash reporting service (Sentry/Firebase Crashlytics)
+    // Note: Crash reporting service (Sentry) should be connected here
   });
 }
 
 Future<void> _initOneSignalBackground() async {
   try {
-     await OneSignal.Debug.setLogLevel(OSLogLevel.verbose); // Changed to verbose for debugging
+     // await OneSignal.Debug.setLogLevel(OSLogLevel.verbose); // Disabled for production
     OneSignal.initialize(SupabaseConfig.oneSignalAppId);
     
     // Wait for OneSignal to be ready
@@ -70,7 +70,7 @@ Future<void> _initOneSignalBackground() async {
     final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     // 🤫 1. Create Silent Channel for Background Service (Stealth Mode)
     const AndroidNotificationChannel serviceChannel = AndroidNotificationChannel(
-      'crescent_bg_service',
+      'apna_bg_service',
       'Background Monitor',
       description: 'Keeps the app running to listen for doorbell',
       importance: Importance.low, // Silent, minified
@@ -80,7 +80,7 @@ Future<void> _initOneSignalBackground() async {
 
     // 🔔 2. Force High Priority Channel for Sound
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'crescent_gate_alarm_v2', // Updated to v2 to force config refresh
+      'apna_gate_alarm_v2', // Updated to v2 to force config refresh
       'Emergency Alarms',
       description: 'Loud notifications for visitor arrivals',
       importance: Importance.max,

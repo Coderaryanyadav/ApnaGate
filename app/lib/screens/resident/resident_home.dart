@@ -7,10 +7,8 @@ import '../../services/firestore_service.dart';
 import '../../models/extras.dart';
 import '../../widgets/banner_ad_widget.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Added
 import 'package:flutter_background_service/flutter_background_service.dart'; // Added
 import 'package:supabase_flutter/supabase_flutter.dart'; // Added
-import '../../utils/persistence_helper.dart'; // Added
 import '../../models/user.dart';
 import '../../utils/app_routes.dart';
 import '../../utils/app_constants.dart';
@@ -27,7 +25,6 @@ class ResidentHome extends ConsumerStatefulWidget {
 class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBindingObserver {
   static bool _hasSetupOneSignal = false;
   static bool _hasShownNoticePopupThisSession = false;
-  static final Set<String> _knownPendingIds = {};
 
   Timer? _refreshTimer;
   StreamSubscription? _visitorSub;
@@ -99,11 +96,12 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
       supabase
           .from('notifications')
           .stream(primaryKey: ['id'])
+          .eq('user_id', user.id) // 🔒 CRITICAL: Server-side filtering
+          .order('created_at', ascending: false) // Latest first
+          .limit(20) // Optimization
           .listen((data) {
-            // Filter for current user's unread notifications
-            // AND ignore 'Visitor' notifications (handled by background service)
+            // Data is now only for this user
             final userNotifications = data.where((n) => 
-              n['user_id'] == user.id && 
               n['read'] == false &&
               !(n['title'] ?? '').toString().contains('Visitor')
             ).toList();
@@ -241,23 +239,7 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
     }
   }
 
-  Future<void> _triggerLocalVisitorAlert(String visitorName) async {
-    const androidDetails = AndroidNotificationDetails(
-      'high_importance_channel_v2', 
-      'Critical Alerts',
-      importance: Importance.max,
-      priority: Priority.high,
-      playSound: true,
-    );
-    const details = NotificationDetails(android: androidDetails);
-    
-    await _localNotifications.show(
-      DateTime.now().millisecond, 
-      '🔔 New Visitor', 
-      '$visitorName is waiting for approval', 
-      details,
-    );
-  }
+
 
   Future<void> _setupOneSignal() async {
     // Run in background - don't await
@@ -383,7 +365,7 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Crescent Gate'),
+        title: const Text('ApnaGate'),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -397,7 +379,7 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
           children: [
             const UserAccountsDrawerHeader(
               decoration: BoxDecoration(color: Color(0xFF1E1E1E)), // Dark Header
-              accountName: Text('Crescent Gate', style: TextStyle(color: Colors.white)),
+              accountName: Text('ApnaGate', style: TextStyle(color: Colors.white)),
               accountEmail: Text('Resident Portal', style: TextStyle(color: Colors.white70)),
               currentAccountPicture: CircleAvatar(backgroundColor: Colors.indigo, child: Icon(Icons.home, color: Colors.white)),
             ),

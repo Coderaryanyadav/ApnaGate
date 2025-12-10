@@ -34,8 +34,8 @@ import 'screens/resident/sos_screen.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-class CrescentGateApp extends ConsumerWidget {
-  const CrescentGateApp({super.key});
+class ApnaGateApp extends ConsumerWidget {
+  const ApnaGateApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -44,7 +44,7 @@ class CrescentGateApp extends ConsumerWidget {
 
     return MaterialApp(
       navigatorKey: navigatorKey,
-      title: 'Crescent Gate',
+      title: 'ApnaGate',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       themeMode: ThemeMode.dark,

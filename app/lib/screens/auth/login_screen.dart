@@ -104,7 +104,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(height: 24),
                   const Text(
-                    'Crescent Gate',
+                    'ApnaGate',
                     style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,

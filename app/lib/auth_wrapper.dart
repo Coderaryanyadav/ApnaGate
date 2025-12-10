@@ -158,7 +158,7 @@ class _NotificationEnforcerState extends State<_NotificationEnforcer> with Widge
               ),
               const SizedBox(height: 16),
               const Text(
-                'To ensure the safety of your society, Crescent Gate requires notifications to be enabled. We cannot alert you of visitors without this permission.',
+                'To ensure the safety of your society, ApnaGate requires notifications to be enabled. We cannot alert you of visitors without this permission.',
                 style: TextStyle(color: Colors.white70, fontSize: 16),
                 textAlign: TextAlign.center,
               ),

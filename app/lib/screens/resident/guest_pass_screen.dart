@@ -104,7 +104,7 @@ class _GuestPassScreenState extends ConsumerState<GuestPassScreen> {
       final imagePath = await File('${directory.path}/guest_pass.png').create();
       await imagePath.writeAsBytes(image);
 
-      final text = '🔒 *Crescent Gate Guest Pass*\n'
+      final text = '🔒 *ApnaGate Guest Pass*\n' // Updated name
                    'Guest: ${_currentPass!.visitorName}\n'
                    'Valid Until: ${_currentPass!.validUntil.toString().substring(0, 16)}\n'
                    'Token: ${_currentPass!.token}';

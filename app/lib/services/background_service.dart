@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:ui';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Added
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/persistence_helper.dart'; // Added
 import '../supabase_config.dart';
@@ -13,7 +12,7 @@ Future<void> initializeBackgroundService() async {
   final service = FlutterBackgroundService();
   
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
-    'crescent_bg_service',
+    'apna_bg_service',
     'Background Monitor',
     description: 'Keeps connection alive',
     importance: Importance.low, 
@@ -27,8 +26,8 @@ Future<void> initializeBackgroundService() async {
       onStart: onStart,
       autoStart: false,
       isForegroundMode: true, // Re-enabled to ensure alarms work
-      notificationChannelId: 'crescent_bg_service',
-      initialNotificationTitle: 'Crescent Gate Security',
+      notificationChannelId: 'apna_bg_service',
+      initialNotificationTitle: 'ApnaGate Security',
       initialNotificationContent: 'Active',
       foregroundServiceNotificationId: 888,
     ),
@@ -47,7 +46,7 @@ Future<void> onStart(ServiceInstance service) async {
   
   // Init Channel for Alerts
   const AndroidNotificationChannel alertChannel = AndroidNotificationChannel(
-    'crescent_gate_alarm_v2', 
+    'apna_gate_alarm_v2', 
     'Critical Alerts',
     importance: Importance.max,
     playSound: true,
@@ -125,19 +124,23 @@ StreamSubscription _startSupabaseStream(String userId, String token, FlutterLoca
               // Freshness check (45s) - Ultra Strict
               final isFresh = createdAt.isAfter(DateTime.now().subtract(const Duration(seconds: 45)));
 
-              if (isFresh) {
-                // Save FIRST
+              // Double check persistence immediately before showing
+              final alreadyAlerted = await PersistenceHelper.loadAlertedIds();
+              if (isFresh && !alreadyAlerted.contains(id)) {
+                // Save FIRST to prevent race conditions
                 await PersistenceHelper.saveAlertedId(id);
-                alertedIds.add(id); // Update local cache
+                // Update local memory
+                alertedIds.add(id); 
+                knownIds.add(id);
                 
                 // Trigger Notification
-                notif.show(
+                await notif.show(
                   notificationId, // <--- DETEMINISTIC ID
                   '🔔 New Visitor',
                   '${visit['visitor_name']} is waiting',
                   const NotificationDetails(
                     android: AndroidNotificationDetails(
-                      'crescent_gate_alarm_v2',
+                      'apna_gate_alarm_v2',
                       'Critical Alerts',
                       importance: Importance.max,
                       priority: Priority.high,

@@ -1,6 +1,6 @@
 {
     "name": "functions",
-    "description": "Cloud Functions for CrescentGate",
+    "description": "Cloud Functions for ApnaGate",
     "scripts": {
         "serve": "firebase emulators:start --only functions",
         "shell": "firebase functions:shell",

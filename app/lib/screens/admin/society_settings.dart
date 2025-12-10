@@ -114,8 +114,8 @@ class _SocietySettingsScreenState extends ConsumerState<SocietySettingsScreen> {
                   color: Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black, blurRadius: 20, offset: const Offset(0, 10)),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black, blurRadius: 20, offset: Offset(0, 10)),
                   ],
                 ),
                 padding: const EdgeInsets.all(24),
@@ -172,8 +172,8 @@ class _SocietySettingsScreenState extends ConsumerState<SocietySettingsScreen> {
                   color: Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black, blurRadius: 20, offset: const Offset(0, 10)),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black, blurRadius: 20, offset: Offset(0, 10)),
                   ],
                 ),
                 padding: const EdgeInsets.all(24),
