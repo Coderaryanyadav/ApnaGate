@@ -191,6 +191,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 40),
+                  Text(
+                    'Built by Aryan',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.white.withValues(alpha: 0.2), // Very subtle
+                      letterSpacing: 2,
+                    ),
+                  ),
                 ],
               ),
             ),

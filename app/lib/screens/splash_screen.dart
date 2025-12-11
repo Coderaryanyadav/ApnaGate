@@ -99,6 +99,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                       strokeWidth: 3,
                     ),
                   ),
+                  const SizedBox(height: 100), // Spacing for bottom credit
+                  Text(
+                    'Made with ❤️ by Aryan',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.3), // Very subtle
+                      letterSpacing: 1.5,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
                 ],
               ),
             ),

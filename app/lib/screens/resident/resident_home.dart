@@ -416,6 +416,21 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
               title: const Text('Logout', style: TextStyle(color: Colors.red)),
               onTap: () => ref.read(authServiceProvider).signOut(),
             ),
+            const Divider(color: Colors.white12),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24.0),
+              child: Center(
+                child: Text(
+                  'Crafted by Aryan',
+                  style: TextStyle(
+                    fontSize: 10, 
+                    color: Colors.white38,
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w300
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
