@@ -186,17 +186,29 @@ class _NotificationEnforcerState extends State<_NotificationEnforcer> with Widge
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
                   onPressed: () async {
-                    // Open settings
-                    // Wait for user to come back (lifecycle listener handles the check)
-                    // But we can also trigger a re-check manually after a delay
-                    await OneSignal.Notifications.requestPermission(true);
-                    // If that fails (user denied permanently), we might need to open settings
-                    // OneSignal doesn't expose openSettings directly easily cross-platform but we rely on the prompt.
-                    // Or we can use generic intent.
-                    // For now, re-requesting often triggers the "Open Settings" system dialog on Android.
+                    // 1. Try Requesting
+                    bool accepted = await OneSignal.Notifications.requestPermission(true);
+                    
+                    // 2. If accepted, update immediately
+                    if (accepted && mounted) {
+                      setState(() => _hasPermission = true);
+                    } else {
+                       // 3. If not accepted (maybe denied permanently), we can't open settings easily via OneSignal alone.
+                       // Just re-check in case they went to settings and came back.
+                       await _checkPermission();
+                    }
                   },
                   child: const Text('ENABLE NOTIFICATIONS'),
                 ),
+              ),
+              const SizedBox(height: 24),
+              TextButton.icon(
+                onPressed: () {
+                   setState(() => _isChecking = true);
+                   _checkPermission();
+                },
+                icon: const Icon(Icons.refresh, color: Colors.white70),
+                label: const Text('I have enabled them (Check Again)', style: TextStyle(color: Colors.white70)),
               ),
             ],
           ),
