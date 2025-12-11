@@ -21,21 +21,25 @@ Future<void> initializeBackgroundService() async {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
   await flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
 
-  await service.configure(
-    androidConfiguration: AndroidConfiguration(
-      onStart: onStart,
-      autoStart: false,
-      isForegroundMode: true, // Re-enabled to ensure alarms work
-      notificationChannelId: 'apna_bg_service',
-      initialNotificationTitle: 'ApnaGate Security',
-      initialNotificationContent: 'Active',
-      foregroundServiceNotificationId: 888,
-    ),
-    iosConfiguration: IosConfiguration(
-      autoStart: false,
-      onForeground: onStart,
-    ),
-  );
+  try {
+    await service.configure(
+      androidConfiguration: AndroidConfiguration(
+        onStart: onStart,
+        autoStart: false,
+        isForegroundMode: true, // Re-enabled to ensure alarms work
+        notificationChannelId: 'apna_bg_service',
+        initialNotificationTitle: 'ApnaGate Security',
+        initialNotificationContent: 'Active',
+        foregroundServiceNotificationId: 888,
+      ),
+      iosConfiguration: IosConfiguration(
+        autoStart: false,
+        onForeground: onStart,
+      ),
+    );
+  } catch (e) {
+    print("Background Service Init Failed: $e");
+  }
 }
 
 @pragma('vm:entry-point')
