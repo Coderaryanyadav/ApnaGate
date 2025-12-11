@@ -31,14 +31,14 @@ serve(async (req) => {
         }
 
         // Parse request body
-        const { type, userId, tagKey, tagValue, wing, flatNumber, title, message, data } = await req.json()
+        const { type, userId, tagKey, tagValue, wing, flatNumber, title, message, data, android_channel_id } = await req.json()
 
         // Build OneSignal notification payload
         let payload: any = {
             app_id: ONESIGNAL_APP_ID,
             headings: { en: title },
             contents: { en: message },
-            android_channel_id: 'apna_gate_alarm_v1',
+            android_channel_id: android_channel_id || 'apna_gate_alarm_v1',
             priority: 10,
             ttl: 3600,
             content_available: true,
@@ -66,7 +66,7 @@ serve(async (req) => {
             ]
         } else if (type === 'sos') {
             // SOS: Notify ALL guards and admins
-            payload.android_channel_id = 'apna_gate_alarm_v2'; // High Priority Channel
+            payload.android_channel_id = 'apna_gate_alarm_v3'; // High Priority Channel
             payload.filters = [
                 { field: 'tag', key: 'role', relation: '=', value: 'guard' },
                 { operator: 'OR' },

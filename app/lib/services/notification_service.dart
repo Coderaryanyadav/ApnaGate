@@ -15,6 +15,7 @@ class NotificationService {
     required String title,
     required String message,
     Map<String, dynamic>? data,
+    String? channelId,
     bool isSilent = false,
   }) async {
     final supabase = Supabase.instance.client;
@@ -28,6 +29,7 @@ class NotificationService {
           'title': title,
           'message': message,
           'data': data,
+          if (channelId != null) 'android_channel_id': channelId,
         },
       );
       debugPrint('✅ PUSH sent to user $userId');
@@ -149,6 +151,7 @@ class NotificationService {
             'flat_number': flatNumber,
             'resident_name': residentName,
           },
+          channelId: 'apna_gate_alarm_v3', // 🚨 FORCE HIGH PRIORITY
         );
       }
     } catch (e) {
