@@ -1,10 +1,11 @@
 
 import 'dart:async';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../utils/persistence_helper.dart'; // Added
+import '../utils/persistence_helper.dart';
 import '../supabase_config.dart';
 
 // Entry point

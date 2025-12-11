@@ -80,7 +80,7 @@ Future<void> _initOneSignalBackground() async {
 
     // 🔔 2. Force High Priority Channel for Sound
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'apna_gate_alarm_v2', // Updated to v2 to force config refresh
+      'apna_gate_alarm_v3', // Updated to v3 to force config refresh
       'Emergency Alarms',
       description: 'Loud notifications for visitor arrivals',
       importance: Importance.max,

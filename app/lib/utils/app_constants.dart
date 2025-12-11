@@ -26,7 +26,7 @@ class AppConstants {
   static const Duration imageCacheDuration = Duration(days: 7);
   
   // Notification Channel
-  static const String notificationChannelId = 'apna_gate_alarm_v1';
+  static const String notificationChannelId = 'apna_gate_alarm_v3';
   static const String notificationChannelName = 'Emergency Alarms';
 
   // Spacing (replacing hardcoded SizedBoxes)
