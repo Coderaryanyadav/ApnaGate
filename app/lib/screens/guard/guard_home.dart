@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'; 
 import 'package:onesignal_flutter/onesignal_flutter.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/app_routes.dart';
@@ -33,7 +35,10 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
     // 1. OneSignal Setup (Critical for SOS)
     if (!_hasSetupOneSignal) {
       _hasSetupOneSignal = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _setupOneSignal());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _setupOneSignal();
+        _startBackgroundService(); // Start background monitoring for SOS
+      });
     }
 
     // 2. Global Auto-Refresh (10s)
@@ -65,7 +70,7 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
 
   Future<void> _triggerLocalSOS(Map<String, dynamic> alert) async { // Added
     const androidDetails = AndroidNotificationDetails(
-      'apna_gate_alarm_v2', // Match channel used elsewhere
+      'apna_gate_alarm_v3', // Match channel used elsewhere
       'Critical Alerts',
       importance: Importance.max,
       priority: Priority.max,
@@ -88,6 +93,26 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
     if (user == null) return;
     OneSignal.login(user.id);
     OneSignal.User.addTagWithKey('role', 'guard');
+  }
+
+  Future<void> _startBackgroundService() async {
+    final service = FlutterBackgroundService();
+    final isRunning = await service.isRunning();
+    
+    if (!isRunning) {
+      await service.startService();
+    }
+    
+    final session = Supabase.instance.client.auth.currentSession;
+    final user = ref.read(authServiceProvider).currentUser;
+    
+    if (session != null && user != null) {
+      service.invoke('start_monitoring', {
+        'user_id': session.user.id,
+        'token': session.accessToken,
+        'role': user.role, // Guards get SOS monitoring
+      });
+    }
   }
 
   @override

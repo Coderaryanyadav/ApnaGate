@@ -258,9 +258,11 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
     
     final session = Supabase.instance.client.auth.currentSession;
     if (session != null) {
+      final user = ref.read(authServiceProvider).currentUser;
       service.invoke('start_monitoring', {
         'user_id': session.user.id,
         'token': session.accessToken,
+        'role': user?.role ?? 'resident', // Pass role for SOS monitoring
       });
     }
   }
