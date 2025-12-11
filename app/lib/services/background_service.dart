@@ -99,35 +99,34 @@ StreamSubscription _startSupabaseStream(String userId, String token, FlutterLoca
           .eq('id', userId)
           .maybeSingle();
 
-      final String? userWing = profile?['wing'];
-      final String? userFlat = profile?['flat_number'];
+      final String? userWing = profile?['wing']?.toString().toUpperCase();
+      final String? userFlat = profile?['flat_number']?.toString().toUpperCase();
 
       final relevantVisitors = data.where((e) => 
-        // Monitor ALL statuses to handle cancellations
-        // Strict Filter: Must match Wing & Flat (if set)
-        (userWing != null && e['wing'] == userWing) &&
-        (userFlat != null && e['flat_number'] == userFlat) 
+        (userWing != null && e['wing']?.toString().toUpperCase() == userWing) &&
+        (userFlat != null && e['flat_number']?.toString().toUpperCase() == userFlat) 
       ).toList();
 
       for (var visit in relevantVisitors) {
         final id = visit['id'] as String;
           
-          // Deterministic Notification ID based on Visitor ID
           final notificationId = id.hashCode;
 
           if (visit['status'] == 'pending') {
-            // Check local memory AND persistent storage for pending visitors
             if (!knownIds.contains(id) && !alertedIds.contains(id)) {
               knownIds.add(id);
               
-              final createdAt = DateTime.tryParse(visit['created_at'] ?? '') ?? DateTime(2000);
-              // Freshness check (40s) - Ultra Strict
-              final isFresh = createdAt.isAfter(DateTime.now().subtract(const Duration(seconds: 40)));
+              // 🌍 UTC Handling: Convert everything to UTC to avoid device timezone issues
+              final createdAtStr = visit['created_at'] ?? '';
+              final createdAt = DateTime.tryParse(createdAtStr)?.toUtc() ?? DateTime(2000).toUtc();
+              final nowUtc = DateTime.now().toUtc();
+              
+              // Freshness: 5s window (Ultra-Tight) - Prevent old alerts on restart
+              final isFresh = createdAt.isAfter(nowUtc.subtract(const Duration(seconds: 10)));
 
-              // Double check persistence immediately before showing
+              // Double check persistence
               final alreadyAlerted = await PersistenceHelper.loadAlertedIds();
               if (isFresh && !alreadyAlerted.contains(id)) {
-                // Save FIRST to prevent race conditions
                 await PersistenceHelper.saveAlertedId(id);
                 // Update local memory
                 alertedIds.add(id); 
@@ -140,11 +139,13 @@ StreamSubscription _startSupabaseStream(String userId, String token, FlutterLoca
                   '${visit['visitor_name']} is waiting',
                   const NotificationDetails(
                     android: AndroidNotificationDetails(
-                      'apna_gate_alarm_v2',
+                      'apna_gate_alarm_v3', // Force Channel Upgrade
                       'Critical Alerts',
                       importance: Importance.max,
-                      priority: Priority.high,
+                      priority: Priority.max,
+                      playSound: true,
                       sound: RawResourceAndroidNotificationSound('notification'),
+                      fullScreenIntent: true, // Force POP UP
                     ),
                   ),
                 );
