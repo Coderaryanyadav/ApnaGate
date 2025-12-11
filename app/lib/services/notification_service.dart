@@ -17,10 +17,9 @@ class NotificationService {
     Map<String, dynamic>? data,
     bool isSilent = false,
   }) async {
+    final supabase = Supabase.instance.client;
     try {
-      final supabase = Supabase.instance.client;
-      
-      // ✅ SECURE: Use Edge Function instead of local key
+      // 1. ✅ SECURE PUSH: Use Edge Function
       await supabase.functions.invoke(
         'send-notification',
         body: {
@@ -29,14 +28,23 @@ class NotificationService {
           'title': title,
           'message': message,
           'data': data,
-          // 'isSilent': isSilent // Function needs update to support isSilent if needed
         },
       );
-      
-      debugPrint('✅ Notification sent to user $userId via Secure Function');
+      debugPrint('✅ PUSH sent to user $userId');
+
+      // 2. ✅ REALTIME DB: Insert into notifications table (Guaranteed History & Local Alert)
+      await supabase.from('notifications').insert({
+        'user_id': userId,
+        'title': title,
+        'message': message,
+        'data': data ?? {},
+        'read': false,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      debugPrint('✅ DB Insert for user $userId');
+
     } catch (e) {
       debugPrint('❌ Notification Failed for $userId: $e');
-      debugPrint('⚠️ Ensure "send-notification" Edge Function is deployed!');
     }
   }
 
@@ -49,9 +57,10 @@ class NotificationService {
     Map<String, dynamic>? data,
     bool isSilent = true,
   }) async {  
+    // Tag notifications are Push-Only usually, unless we fetch all users.
+    // For now, keep as is (Edge Function Only).
     try {
       final supabase = Supabase.instance.client;
-
       await supabase.functions.invoke(
         'send-notification',
         body: {
@@ -63,15 +72,14 @@ class NotificationService {
           'data': data,
         },
       );
-      
-      debugPrint('✅ Notification sent to tag $tagKey=$tagValue via Secure Function');
+      debugPrint('✅ TAG Notification sent: $tagKey=$tagValue');
     } catch (e) {
       debugPrint('❌ Tag Notification Failed: $e');
     }
   }
 
   /// Notify specific flat (wing + flat number)
-  /// Uses BOTH OneSignal (via Function) AND Supabase Realtime
+  /// Uses CENTRALIZED notifyUser for consistent delivery
   Future<void> notifyFlat({
     required String wing,
     required String flatNumber,
@@ -81,14 +89,6 @@ class NotificationService {
   }) async {
     try {
       final supabase = Supabase.instance.client;
-      
-      // Method 1: Edge Function (Push)
-      // We iterate in the function or send a tag-based flat notification if tags are set.
-      // Ideally, residents should be tagged with "wing" and "flat_number".
-      // Assuming they ARE tagged (recommended), we use type='flat'.
-      // If not tagged, we must fallback to fetching users.
-      // Safest approach for now: Fetch users and notify individually to match previous logic,
-      // BUT we can use the loop with the secure function.
       
       final usersResponse = await supabase
           .from('profiles')
@@ -101,30 +101,18 @@ class NotificationService {
       if (users.isEmpty) return;
       
       for (var user in users) {
-        // Method 1: Secure Push
+        // Use the robust notifyUser (Push + DB)
         await notifyUser(
           userId: user['id'],
           title: title,
           message: message,
-          data: visitorId != null ? {'visitor_id': visitorId} : null,
+          data: {
+            'type': 'visitor_arrival', 
+            'wing': wing, 
+            'flat_number': flatNumber,
+            if (visitorId != null) 'visitor_id': visitorId
+          },
         );
-
-        // Method 2: Realtime Database (Guaranteed delivery history)
-        try {
-          await supabase.from('notifications').insert({
-            'user_id': user['id'],
-            'title': title,
-            'message': message,
-            'data': {
-              'type': 'visitor_arrival', 
-              'wing': wing, 
-              'flat_number': flatNumber,
-              if (visitorId != null) 'visitor_id': visitorId
-            },
-          });
-        } catch (e) {
-          debugPrint('realtime_error:${user['id']}:$e'); 
-        }
       }
     } catch (e) {
       debugPrint('❌ Flat Notification Error: $e');
@@ -140,26 +128,31 @@ class NotificationService {
     try {
       final supabase = Supabase.instance.client;
       
-      await supabase.functions.invoke(
-        'send-notification',
-        body: {
-          'type': 'sos', // Requires updated function
-          'wing': wing,
-          'flatNumber': flatNumber,
-          'title': '🚨 SOS ALERT',
-          'message': 'EMERGENCY at $wing-$flatNumber by $residentName',
-          'data': {
+      // 1. Fetch all Guards and Admins
+      final recipients = await supabase
+          .from('profiles')
+          .select('id')
+          .or('role.eq.guard,role.eq.admin');
+      
+      final List<dynamic> users = recipients as List<dynamic>;
+
+      debugPrint('🚨 Sending SOS to ${users.length} guards/admins');
+
+      for (var user in users) {
+        await notifyUser(
+          userId: user['id'],
+          title: '🚨 SOS ALERT',
+          message: 'EMERGENCY at $wing-$flatNumber by $residentName',
+          data: {
             'type': 'sos_alert',
             'wing': wing,
             'flat_number': flatNumber,
+            'resident_name': residentName,
           },
-        },
-      );
-
-      debugPrint('✅ SOS Alert sent to Guards & Admins via Secure Function');
+        );
+      }
     } catch (e) {
       debugPrint('❌ SOS Notification Exception: $e');
-      debugPrint('⚠️ CRITICAL: Ensure "send-notification" function supports "sos" type');
     }
   }
 
@@ -169,6 +162,7 @@ class NotificationService {
     required String visitorName,
     required bool isApproved,
   }) async {
+    // Uses notifyUser -> Push + DB + Local Alert
     await notifyUser(
       userId: residentId,
       title: isApproved ? '✅ Visitor Approved' : '❌ Visitor Rejected',
@@ -178,22 +172,25 @@ class NotificationService {
       data: {
         'type': 'visitor_status', 
         'approved': isApproved,
+        'visitor_name': visitorName,
         'alert': 'true',
       },
     );
   }
 
-  /// 🧹 Sync Dismissal: Mark all notifications for this visitor as read for EVERYONE
+  /// 🧹 Sync Dismissal: Mark all notifications for this visitor as read
   Future<void> markAllNotificationsAsReadForVisitor(String visitorId) async {
     try {
       final supabase = Supabase.instance.client;
-      // This update query uses the JSON filter to find all notifications for this visitor
       await supabase
           .from('notifications')
           .update({'read': true})
-          .eq('data->>visitor_id', visitorId);
+          // Fix JSON filter syntax for Supabase Flutter if needed, or use a simpler approach
+          // .eq('data->>visitor_id', visitorId) might fail if column is jsonb and driver is specific
+          // Using containedIn for jsonb is safer if structure matches
+          .contains('data', {'visitor_id': visitorId});
           
-      debugPrint('🧹 Synced dismissal: Notifications for visitor $visitorId marked as read for all users');
+      debugPrint('🧹 Synced dismissal for $visitorId');
     } catch (e) {
       debugPrint('❌ Failed to sync dismissal: $e');
     }
