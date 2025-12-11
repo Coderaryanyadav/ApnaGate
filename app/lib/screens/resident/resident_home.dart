@@ -25,6 +25,7 @@ class ResidentHome extends ConsumerStatefulWidget {
 class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBindingObserver {
   static bool _hasSetupOneSignal = false;
   static bool _hasShownNoticePopupThisSession = false;
+  bool _isFirstLoad = true; // Added for silent catch-up
 
   final Set<String> _handledNotificationIds = {}; // Local deduplication
   Timer? _refreshTimer;
@@ -101,55 +102,50 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
           .order('created_at', ascending: false) // Latest first
           .limit(20) // Optimization
           .listen((data) {
-            // Data is now only for this user
+             // 1. Filter Unread
             final userNotifications = data.where((n) => 
               n['read'] == false &&
-              !_handledNotificationIds.contains(n['id']) // Filter locally handled
+              !_handledNotificationIds.contains(n['id'])
             ).toList();
             
             if (userNotifications.isNotEmpty) {
               for (var notification in userNotifications) {
-                // Prevent duplicate alerts
-                _handledNotificationIds.add(notification['id']); // Mark handled immediately
+                 _handledNotificationIds.add(notification['id']); // Mark handled locally
+                 
+                 // 2. Suppress Alerts on Startup (Silent Catch-up)
+                 if (_isFirstLoad) {
+                   debugPrint('🤫 Startup: Silently marking notification as read: ${notification['title']}');
+                   // Just mark read, no alert
+                   supabase.from('notifications').update({'read': true}).eq('id', notification['id']);
+                   continue;
+                 }
 
-                // Filter out "Visitor" titles (handled by BG service usually, but check logic)
-                // BG service handles 'visitors' table PENDING items.
-                // This stream is 'notifications' table.
-                // 'notifications' table usually receives 'Visitor Arrival' from notifyFlat (Realtime).
-                // If BG Service handles 'Visitor' alert, we might duplicate.
-                // BG Service looks at 'visitors'. 'notifications' is distinct.
-                // We should probably show ALL notifications from 'notifications' table here,
-                // AS LONG AS they are not covered by BG service.
-                // BG Service covers: "Visitor ... waiting" (Status=Pending).
-                // Notifications table covers: "Guest Arrived" (Entered), "Staff Entry", "Visitor Approved".
-                // So valid to show here.
-                
-                // 🛑 CHECK FRESHNESS: Don't alert if older than 5 mins (prevent startup spam)
+                // 🛑 CHECK FRESHNESS (Backup for runtime): Don't alert if older than 5 mins
                 final createdAtStr = notification['created_at'];
                 if (createdAtStr != null) {
                     final created = DateTime.tryParse(createdAtStr);
                     if (created != null && DateTime.now().difference(created).inMinutes > 5) {
-                         // Older than 5 mins? Just mark read silently
-                         supabase
-                            .from('notifications')
-                            .update({'read': true})
-                            .eq('id', notification['id']);
-                         continue; // Skip alert
+                         supabase.from('notifications').update({'read': true}).eq('id', notification['id']);
+                         continue; 
                     }
                 }
 
-                // Show local notification
+                // 3. Show Alert (Runtime Only)
                  _showLocalNotification(
                   notification['title'] ?? 'New Notification',
                   notification['message'] ?? '',
                 );
                 
-                // Mark as read in DB
+                // 4. Mark Read
                 supabase
                     .from('notifications')
                     .update({'read': true})
                     .eq('id', notification['id']);
               }
+            }
+            // After processing first batch, disable suppression
+            if (_isFirstLoad) {
+               _isFirstLoad = false;
             }
           });
     }
