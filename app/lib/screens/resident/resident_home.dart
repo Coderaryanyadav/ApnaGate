@@ -124,6 +124,20 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
                 // Notifications table covers: "Guest Arrived" (Entered), "Staff Entry", "Visitor Approved".
                 // So valid to show here.
                 
+                // 🛑 CHECK FRESHNESS: Don't alert if older than 5 mins (prevent startup spam)
+                final createdAtStr = notification['created_at'];
+                if (createdAtStr != null) {
+                    final created = DateTime.tryParse(createdAtStr);
+                    if (created != null && DateTime.now().difference(created).inMinutes > 5) {
+                         // Older than 5 mins? Just mark read silently
+                         supabase
+                            .from('notifications')
+                            .update({'read': true})
+                            .eq('id', notification['id']);
+                         continue; // Skip alert
+                    }
+                }
+
                 // Show local notification
                  _showLocalNotification(
                   notification['title'] ?? 'New Notification',
