@@ -93,8 +93,8 @@ class NotificationService {
       final usersResponse = await supabase
           .from('profiles')
           .select('id, name')
-          .eq('wing', wing.toUpperCase())
-          .eq('flat_number', flatNumber.toUpperCase());
+          .eq('wing', wing)
+          .eq('flat_number', flatNumber);
       
       final users = usersResponse as List<dynamic>;
       

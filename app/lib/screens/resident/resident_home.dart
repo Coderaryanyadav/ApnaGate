@@ -26,6 +26,7 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
   static bool _hasSetupOneSignal = false;
   static bool _hasShownNoticePopupThisSession = false;
 
+  final Set<String> _handledNotificationIds = {}; // Local deduplication
   Timer? _refreshTimer;
   StreamSubscription? _visitorSub;
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
@@ -103,18 +104,33 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
             // Data is now only for this user
             final userNotifications = data.where((n) => 
               n['read'] == false &&
-              !(n['title'] ?? '').toString().contains('Visitor')
+              !_handledNotificationIds.contains(n['id']) // Filter locally handled
             ).toList();
             
             if (userNotifications.isNotEmpty) {
               for (var notification in userNotifications) {
+                // Prevent duplicate alerts
+                _handledNotificationIds.add(notification['id']); // Mark handled immediately
+
+                // Filter out "Visitor" titles (handled by BG service usually, but check logic)
+                // BG service handles 'visitors' table PENDING items.
+                // This stream is 'notifications' table.
+                // 'notifications' table usually receives 'Visitor Arrival' from notifyFlat (Realtime).
+                // If BG Service handles 'Visitor' alert, we might duplicate.
+                // BG Service looks at 'visitors'. 'notifications' is distinct.
+                // We should probably show ALL notifications from 'notifications' table here,
+                // AS LONG AS they are not covered by BG service.
+                // BG Service covers: "Visitor ... waiting" (Status=Pending).
+                // Notifications table covers: "Guest Arrived" (Entered), "Staff Entry", "Visitor Approved".
+                // So valid to show here.
+                
                 // Show local notification
-                _showLocalNotification(
+                 _showLocalNotification(
                   notification['title'] ?? 'New Notification',
                   notification['message'] ?? '',
                 );
                 
-                // Mark as read
+                // Mark as read in DB
                 supabase
                     .from('notifications')
                     .update({'read': true})
