@@ -753,14 +753,18 @@ class FirestoreService {
       // 1. Delete Logs first
       await _client.from('staff_attendance_logs').delete().eq('staff_id', id);
     } catch (e) {
-      // Ignore if logs don't exist or permission denied, try to delete staff anyway if possible
-      // though typically if permission is denied, it might block. But let's try.
-      // debugPrint('Log cleanup warning: $e'); // debugPrint not available here
-      // debugPrint is safer in production than print
-      // debugPrint('Log cleanup warning: $e'); 
+      // Ignore if logs don't exist or permission denied
     }
     // 2. Delete Staff
     await _client.from('daily_help').delete().eq('id', id);
+  }
+
+  /// Get ALL househelps (For Guard to search/scan)
+  Stream<List<Map<String, dynamic>>> getAllDailyHelp() {
+    return _client
+        .from('daily_help')
+        .stream(primaryKey: ['id'])
+        .order('name', ascending: true);
   }
 
   Future<Map<String, dynamic>?> getHousehelpById(String id) async {
