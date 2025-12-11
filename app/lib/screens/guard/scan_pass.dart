@@ -91,7 +91,7 @@ class _ScanPassScreenState extends ConsumerState<ScanPassScreen> with SingleTick
                   wing: pass.wing ?? '',
                   flatNumber: pass.flatNumber ?? '',
                   title: 'Guest Arrived',
-                  message: 'Guest (${pass.guestCount} ppl) has entered.',
+                  message: '${pass.visitorName} (${pass.guestCount} ppl) has entered.',
                   visitorId: pass.id,
                 );
              } catch (e) {
