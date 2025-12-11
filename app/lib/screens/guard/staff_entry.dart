@@ -100,10 +100,21 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
 
                 // 3. Filter
                 final filtered = allStaff.where((p) {
+                   // 🔍 Search Match
                    final matchName = p.name.toLowerCase().contains(_searchQuery);
                    final matchCat = p.category.toLowerCase().contains(_searchQuery);
                    final matchFlat = p.flat?.toLowerCase().contains(_searchQuery) ?? false;
-                   return matchName || matchCat || matchFlat;
+                   final isMatch = matchName || matchCat || matchFlat;
+
+                   // 🛑 Logic: 
+                   // - Service Providers (Guard, Driver): Always show (or filter by search if typed)
+                   // - Daily Help (Maids): ONLY show if Search is typed (hide by default to declutter)
+                   
+                   if (_searchQuery.isEmpty) {
+                     return !p.isDailyHelp; // Show only Service Providers by default
+                   }
+                   
+                   return isMatch;
                 }).toList();
 
                 if (filtered.isEmpty) {
