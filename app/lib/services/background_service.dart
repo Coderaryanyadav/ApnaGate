@@ -38,7 +38,7 @@ Future<void> initializeBackgroundService() async {
       ),
     );
   } catch (e) {
-    print("Background Service Init Failed: $e");
+    debugPrint('Background Service Init Failed: $e');
   }
 }
 
@@ -185,10 +185,13 @@ StreamSubscription _startNotificationStream(String userId, String token, Flutter
   
   return client.from('notifications')
     .stream(primaryKey: ['id'])
-    .eq('user_id', userId)
-    .eq('read', false)
     .listen((List<Map<String, dynamic>> data) async {
-      for (var notification in data) {
+      // Filter for this user and unread notifications
+      final userNotifications = data.where((n) => 
+        n['user_id'] == userId && n['read'] == false
+      ).toList();
+      
+      for (var notification in userNotifications) {
         final id = notification['id'] as String;
         
         if (handledIds.contains(id)) continue;
@@ -236,9 +239,11 @@ StreamSubscription _startSOSStream(String token, FlutterLocalNotificationsPlugin
   
   return client.from('sos_alerts')
     .stream(primaryKey: ['id'])
-    .eq('status', 'active')
     .listen((List<Map<String, dynamic>> data) async {
-      for (var alert in data) {
+      // Filter for active SOS only
+      final activeSOS = data.where((alert) => alert['status'] == 'active').toList();
+      
+      for (var alert in activeSOS) {
         final id = alert['id'] as String;
         
         if (handledSOS.contains(id)) continue;
