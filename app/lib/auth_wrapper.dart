@@ -116,22 +116,39 @@ class _NotificationEnforcerState extends State<_NotificationEnforcer> with Widge
   }
 
   Future<void> _checkPermission() async {
-    // Wait a bit to ensure OneSignal is init
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    // We assume true initially to avoid flicker if API call is slow
-    bool status = OneSignal.Notifications.permission;
-    
-    if (!status) {
-      // Try requesting again
-      status = await OneSignal.Notifications.requestPermission(true);
-    }
-
-    if (mounted) {
-      setState(() {
-        _hasPermission = status;
-        _isChecking = false;
-      });
+    try {
+      // ⏳ Increase wait time to ensure OneSignal init completes (main.dart has 1s delay)
+      await Future.delayed(const Duration(seconds: 3));
+      
+      // We assume true initially to avoid flicker if API call is slow
+      bool status = OneSignal.Notifications.permission;
+      debugPrint('🔔 Permission Check: $status');
+      
+      if (!status) {
+        // Try requesting again
+        status = await OneSignal.Notifications.requestPermission(true);
+      }
+      
+      if (mounted) {
+        setState(() {
+          _hasPermission = status;
+        });
+      }
+    } catch (e) {
+      debugPrint('⚠️ Permission Check Failed: $e');
+      // In case of error (e.g. blocked, not init), let user proceed if possible or show manual enable screen
+      // Assuming false to be safe and force user to check settings if critical
+      if (mounted) {
+        setState(() {
+          _hasPermission = false; // Fallback to "Please Enable" screen which is safer than blocking
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isChecking = false; // ✅ CRITICAL: Ensure loader always dismisses
+        });
+      }
     }
   }
 
