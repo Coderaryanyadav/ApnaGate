@@ -59,8 +59,8 @@ class AuthWrapper extends ConsumerWidget {
                 break;
             }
 
-            // 🛡️ Force Notifications Wrapper
-            return _NotificationEnforcer(child: home);
+            // 🛡️ User requested removal of blocking screen
+            return home;
           },
           loading: () => const Scaffold(
             backgroundColor: Colors.black, // Match theme for smoother load
