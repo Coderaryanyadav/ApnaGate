@@ -350,20 +350,72 @@ class FirestoreService {
        // Mapping from VisitorRequest model to visitors table
        'resident_id': request.residentId,
        'visitor_name': request.visitorName,
-       'visitor_phone': request.visitorPhone, 
-       'photo_url': request.photoUrl,
-       'purpose': request.purpose,
-       'wing': request.wing.toUpperCase(), // ✅ Standardize
-       'flat_number': request.flatNumber.toUpperCase(), // ✅ Standardize
-       'guard_id': request.guardId,
-       'status': 'pending',
-       'created_at': DateTime.now().toIso8601String(),
-     });
+       'visitor_phone': request.visitorPhone, // ✅ Added
+     'photo_url': request.photoUrl, // ✅ Added
+     'purpose': request.purpose, // ✅ Added
+     'wing': request.wing.toUpperCase(),
+     'flat_number': request.flatNumber.toUpperCase(), // ✅ Standardize
+     'guard_id': request.guardId, // ✅ Added
+     'status': 'pending',
+     'created_at': DateTime.now().toIso8601String(),
+   });
+}
+
+  Stream<List<VisitorRequest>> getPendingRequests(String residentId) {
+    return _client.from('visitors')
+        .stream(primaryKey: ['id'])
+        .map((event) {
+          return event
+            .where((e) => e['resident_id'] == residentId && e['status'] == 'pending')
+            .map((e) => VisitorRequest.fromMap(e, e['id']))
+            .toList();
+        });
   }
 
-  // ...
+  Stream<List<VisitorRequest>> getVisitorHistory(String residentId) {
+     return _client.from('visitors')
+        .stream(primaryKey: ['id'])
+        .order('created_at')
+        .limit(50)
+        .map((event) {
+          return event
+            .where((e) => e['resident_id'] == residentId)
+            .map((e) => VisitorRequest.fromMap(e, e['id']))
+            .toList();
+        });
+  }
 
-  Future<void> createGuestPass({
+  Stream<List<VisitorRequest>> getTodayVisitorLogs() {
+     final now = DateTime.now();
+     final startOfDay = DateTime(now.year, now.month, now.day).toIso8601String();
+     
+     return _client.from('visitors')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false)
+        .limit(100)
+        .map((event) {
+          return event
+            .where((e) {
+               final created = DateTime.parse(e['created_at']);
+               // Simple check if created after start of today
+               // Note: 'created_at' is string in Supabase
+               return created.isAfter(DateTime.parse(startOfDay));
+            })
+            .map((e) => VisitorRequest.fromMap(e, e['id']))
+            .toList();
+        });
+  }
+
+  Future<void> updateVisitorStatus(String id, String status) async {
+    await _client.from('visitors').update({
+      'status': status,
+      if (status == 'inside' || status == 'entered') 'entry_time': DateTime.now().toUtc().toIso8601String(),
+      if (status == 'exited') 'exit_time': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', id);
+  }
+
+  // Guest Pass Methods
+  Future<String> createGuestPass({
     required String residentId, 
     required String visitorName,
     DateTime? validUntil,
@@ -389,17 +441,202 @@ class FirestoreService {
     return token;
   }
 
-  // ...
+  Future<void> markPassUsed(String id) async {
+    await _client.from('guest_passes').update({
+       'is_used': true,
+       'used_at': DateTime.now().toIso8601String(),
+    }).eq('id', id);
+
+    // Also create a Visitor Log entry
+    final pass = await _client.from('guest_passes').select().eq('id', id).maybeSingle();
+    if (pass != null) {
+       await _client.from('visitors').insert({
+         'resident_id': pass['resident_id'],
+         'visitor_name': pass['visitor_name'],
+         'purpose': 'Guest Pass',
+         'status': 'entered', // Auto-enter? Or 'approved'
+         'created_at': DateTime.now().toIso8601String(),
+         // Add other fields if needed
+       });
+    }
+  }
+  
+  Future<GuestPass?> getPassByToken(String token) async {
+    // Join with profiles table to get flat details
+    final response = await _client
+        .from('guest_passes')
+        .select('*, profiles(flat_number, wing)')
+        .eq('token', token)
+        .maybeSingle();
+    
+    if (response == null) return null;
+    return GuestPass.fromMap(response, response['id']);
+  }
+
+  // Aliases for Guest Pass
+  Future<void> markGuestPassUsed(String id) => markPassUsed(id);
+  Future<GuestPass?> getGuestPassByToken(String token) => getPassByToken(token);
 
   Future<List<AppUser>> getResidentsByFlat(String wing, String flat) async {
     final response = await _client.from('profiles')
         .select()
-        .ilike('wing', wing) // ✅ Case Insensitive
-        .ilike('flat_number', flat); // ✅ Case Insensitive
+        .ilike('wing', wing) // Case Insensitive
+        .ilike('flat_number', flat); // Case Insensitive
     return response.map((e) => AppUser.fromMap(e, e['id'])).toList();
   }
 
-  // ...
+  Stream<List<Map<String, dynamic>>> getNotifications(String userId) {
+     // Return empty stream as notifications via Supabase Realtime are different channel
+     return Stream.value([]);
+  }
+  
+  Future<void> cleanupNonEssentialUsers() async {
+    final response = await _client.from('profiles').select();
+    
+    for (var user in response) {
+      final role = user['role'] as String? ?? 'resident';
+      final email = user['email'] as String? ?? '';
+      final id = user['id'] as String;
+
+      if (role == 'admin') continue;
+      if (role == 'guard') continue;
+      if (email == 'resident@example.com') continue; // Keep the specific demo user
+
+      // Delete Profile
+      await _client.from('profiles').delete().eq('id', id);
+      
+      // Attempt to delete Auth User (will likely fail if not Service Role, but worth a try)
+      try {
+        await _client.auth.admin.deleteUser(id);
+      } catch (_) {}
+    }
+  }
+
+  // ===========================================================================
+  // 📊 ANALYTICS (REAL DATA)
+  // ===========================================================================
+
+  /// Get user counts by role (admin, guard, resident)
+  Future<Map<String, int>> getUserCountsByRole() async {
+    final response = await _client.from('profiles').select('role');
+    final Map<String, int> counts = {'admin': 0, 'guard': 0, 'resident': 0};
+    for (var user in response) {
+      final role = user['role'] as String?;
+      if (role != null && counts.containsKey(role)) {
+        counts[role] = counts[role]! + 1;
+      }
+    }
+    return counts;
+  }
+
+  /// Get total visitors count
+  Future<int> getTotalVisitorsCount() async {
+    final response = await _client.from('visitors').select('id');
+    return response.length;
+  }
+
+  /// Get visitor counts by status
+  Future<Map<String, int>> getVisitorCountsByStatus() async {
+    final response = await _client.from('visitors').select('status');
+    final Map<String, int> counts = {};
+    for (var visitor in response) {
+      final status = visitor['status'] as String? ?? 'unknown';
+      counts[status] = (counts[status] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  /// Get daily visitor counts for last 7 days
+  Future<List<Map<String, dynamic>>> getDailyVisitorCounts({int days = 7}) async {
+    final now = DateTime.now();
+    final startDate = now.subtract(Duration(days: days));
+    
+    final response = await _client
+        .from('visitors')
+        .select('created_at')
+        .gte('created_at', startDate.toIso8601String());
+    
+    // Group by date
+    final Map<String, int> dailyCounts = {};
+    for (var visitor in response) {
+      final createdAt = DateTime.parse(visitor['created_at'] as String);
+      final dateKey = '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')}';
+      dailyCounts[dateKey] = (dailyCounts[dateKey] ?? 0) + 1;
+    }
+    
+    // Fill in missing days with 0
+    final List<Map<String, dynamic>> result = [];
+    for (int i = days - 1; i >= 0; i--) {
+      final date = now.subtract(Duration(days: i));
+      final dateKey = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      result.add({
+        'date': dateKey,
+        'count': dailyCounts[dateKey] ?? 0,
+        'dayName': _getDayName(date.weekday),
+      });
+    }
+    
+    return result;
+  }
+
+  String _getDayName(int weekday) {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return days[weekday - 1];
+  }
+
+  /// Get active SOS alerts count
+  Future<int> getActiveSOSCount() async {
+    final response = await _client
+        .from('sos_alerts')
+        .select('id')
+        .eq('status', 'active');
+    return response.length;
+  }
+
+  /// Get complaints count by status
+  Future<Map<String, int>> getComplaintCountsByStatus() async {
+    final response = await _client.from('complaints').select('status');
+    final Map<String, int> counts = {};
+    for (var complaint in response) {
+      final status = complaint['status'] as String? ?? 'open';
+      counts[status] = (counts[status] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  // ===========================================================================
+  // 🏠 HOUSEHOLD MANAGEMENT
+  // ===========================================================================
+
+  Stream<List<Map<String, dynamic>>> getHouseholdMembers(String ownerId) {
+    return _client.from('household_registry')
+        .stream(primaryKey: ['id'])
+        .eq('owner_id', ownerId)
+        .order('created_at')
+        .map((event) => event);
+  }
+
+  Stream<List<AppUser>> getResidentsStream(String wing, String flatNumber) {
+    return _client
+        .from('profiles')
+        .stream(primaryKey: ['id'])
+        .map((data) => data.where((item) => 
+            item['wing']?.toString().toUpperCase() == wing.toUpperCase() && 
+            item['flat_number']?.toString().toUpperCase() == flatNumber.toUpperCase()
+        ).map((e) => AppUser.fromMap(e, e['id'])).toList());
+  }
+
+  /// Get household members by flat (wing + flat_number) - for synced view
+  Stream<List<Map<String, dynamic>>> getHouseholdMembersByFlat(String wing, String flatNumber) {
+    return _client
+        .from('household_registry')
+        .stream(primaryKey: ['id'])
+        .order('created_at')
+        .map((data) => data.where((item) => 
+            item['wing']?.toString().toUpperCase() == wing.toUpperCase() && 
+            item['flat_number']?.toString().toUpperCase() == flatNumber.toUpperCase()
+        ).toList());
+  }
 
   Future<void> addHouseholdMember({
     required String ownerId,
@@ -417,17 +654,20 @@ class FirestoreService {
       'name': name,
       'phone': phone,
       'role': role,
-      'wing': wing.toUpperCase(), // ✅ Standardize
-      'flat_number': flatNumber.toUpperCase(), // ✅ Standardize
+      'wing': wing.toUpperCase(),
+      'flat_number': flatNumber.toUpperCase(),
       'email': email,
       'photo_url': photoUrl,
-      'is_registered': linkedUserId != null, 
+      'is_registered': linkedUserId != null, // Mark as registered if ID provided
       'created_at': DateTime.now().toIso8601String(),
     });
   }
-  
-  // ...
 
+  Future<void> removeHouseholdMember(String id) async {
+    await _client.from('household_registry').delete().eq('id', id);
+  }
+
+  // Used when Owner creates an account for Family/Tenant directly
   Future<void> createProfileForMember({
     required String id,
     required String email,
@@ -446,28 +686,54 @@ class FirestoreService {
       'name': name,
       'phone': phone,
       'role': role,
-      'wing': wing.toUpperCase(), // ✅ Standardize
-      'flat_number': flatNumber.toUpperCase(), // ✅ Standardize
+      'wing': wing.toUpperCase(),
+      'flat_number': flatNumber.toUpperCase(),
       'owner_id': ownerId,
       'photo_url': photoUrl,
-      'created_at': DateTime.now().toIso8601String(),
+      'created_at': DateTime.now().toIso8601String(), // This might update created_at, but acceptable 
     });
   }
 
-  // ...
 
-  Stream<List<Map<String, dynamic>>> getHouseholdMembersByFlat(String wing, String flatNumber) {
-    return _client
-        .from('household_registry')
-        .stream(primaryKey: ['id'])
-        .order('created_at')
-        .map((data) => data.where((item) => 
-            item['wing']?.toString().toUpperCase() == wing.toUpperCase() && 
-            item['flat_number']?.toString().toUpperCase() == flatNumber.toUpperCase()
-        ).toList());
+  // --- HOUSEHELP / STAFF MANAGEMENT ---
+
+  Future<void> addHousehelp({
+    required String ownerId,
+    required String name,
+    required String role,
+    String? phone,
+    String? photoUrl,
+  }) async {
+    // Fetch owner's profile to get wing and flat_number
+    final ownerProfile = await _client
+        .from('profiles')
+        .select('wing, flat_number')
+        .eq('id', ownerId)
+        .maybeSingle();
+    
+    if (ownerProfile == null) {
+      throw Exception('Owner profile not found');
+    }
+    
+    await _client.from('daily_help').insert({
+      'owner_id': ownerId,
+      'name': name,
+      'role': role,
+      'phone': phone,
+      'photo_url': photoUrl,
+      'is_present': false,
+      'wing': ownerProfile['wing'],
+      'flat_number': ownerProfile['flat_number'],
+    });
   }
 
-  // ...
+  Stream<List<Map<String, dynamic>>> getHousehelps(String ownerId) {
+    return _client
+        .from('daily_help')
+        .stream(primaryKey: ['id'])
+        .eq('owner_id', ownerId)
+        .order('name', ascending: true);
+  }
 
   /// Get househelps by flat (wing + flat_number) - for synced view
   Stream<List<Map<String, dynamic>>> getHousehelpsByFlat(String wing, String flatNumber) {
