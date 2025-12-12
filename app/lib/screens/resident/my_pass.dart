@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:crypto/crypto.dart';
-import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
+import 'package:otp/otp.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // Added
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
@@ -31,12 +32,51 @@ class _MyPassScreenState extends ConsumerState<MyPassScreen> with SingleTickerPr
     super.dispose();
   }
 
-  String _generateAuthCode(String uid) {
-    final window = (DateTime.now().millisecondsSinceEpoch / 30000).floor();
-    final secretKey = utf8.encode('CG_SECURE_$uid');
-    final hmac = Hmac(sha256, secretKey);
-    final digest = hmac.convert(utf8.encode(window.toString()));
-    return 'AUTH:$uid:$digest';
+
+
+  String? _cachedSecret;
+  
+  Future<String> _getSecret(String uid) async {
+    if (_cachedSecret != null) return _cachedSecret!;
+    
+    final box = Hive.box('user_cache');
+    String? secret = box.get('totp_secret');
+    
+    if (secret == null) {
+       // Try Online
+       try {
+         final res = await Supabase.instance.client
+           .from('identity_secrets')
+           .select('secret')
+           .eq('id', uid)
+           .maybeSingle();
+           
+         if (res != null) {
+            secret = res['secret'];
+         } else {
+            // Generate & Save
+            secret = OTP.randomSecret(); 
+            await Supabase.instance.client.from('identity_secrets').insert({
+               'id': uid, 'secret': secret
+            });
+         }
+         await box.put('totp_secret', secret);
+       } catch (e) {
+         debugPrint('Err fetching secret: $e');
+         // If offline and no secret, we can't generate valid QR
+         return '';
+       }
+    }
+    _cachedSecret = secret;
+    return secret!;
+  }
+
+  String _generateAuthCode(String uid, String secret) {
+    if (secret.isEmpty) return 'ERROR';
+    // Generate TOTP (30s window, 6 digits)
+    final code = OTP.generateTOTPCodeString(secret, DateTime.now().millisecondsSinceEpoch, length: 6, interval: 30);
+    // Payload: "UID|TOTP"
+    return '$uid|$code';
   }
 
   @override
@@ -236,11 +276,34 @@ class _MyPassScreenState extends ConsumerState<MyPassScreen> with SingleTickerPr
                                     color: Colors.white,
                                     borderRadius: BorderRadius.circular(16),
                                   ),
-                                  child: QrImageView(
-                                    data: _generateAuthCode(profile.id),
-                                    version: QrVersions.auto,
-                                    size: 220.0,
-                                    backgroundColor: Colors.white,
+                                  child: FutureBuilder<String>(
+                                    future: _getSecret(profile.id),
+                                    builder: (context, secretSnap) {
+                                      if (!secretSnap.hasData) {
+                                        return const SizedBox(
+                                          height: 220, 
+                                          width: 220, 
+                                          child: Center(child: CircularProgressIndicator(color: Colors.black))
+                                        );
+                                      }
+                                      
+                                      final secret = secretSnap.data!;
+                                      if (secret.isEmpty) {
+                                        // Should trigger online fetch if empty, but handled in _getSecret
+                                        return const SizedBox(
+                                          height: 220,
+                                          width: 220,
+                                          child: Center(child: Text('Setup Required (Go Online)', style: TextStyle(color: Colors.red))),
+                                        );
+                                      }
+                                      
+                                      return QrImageView(
+                                        data: _generateAuthCode(profile.id, secret),
+                                        version: QrVersions.auto,
+                                        size: 220.0,
+                                        backgroundColor: Colors.white,
+                                      );
+                                    }
                                   ),
                                 ),
                                 const SizedBox(height: 16),

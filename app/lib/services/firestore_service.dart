@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../models/user.dart';
 import '../models/extras.dart';
 import '../models/visitor_request.dart';
@@ -26,17 +27,28 @@ class FirestoreService {
   }
 
   Future<AppUser?> getUser(String uid) async {
+    final box = Hive.box('user_cache');
+    
+    // 1. Try Network
     try {
       final response = await _client.from('profiles').select().eq('id', uid).maybeSingle();
-      if (response == null) return null;
-      return AppUser.fromMap(response, uid);
-    } on PostgrestException catch (e, stackTrace) {
-      ErrorLogger.log(e, stackTrace: stackTrace, context: 'Firestore - Get User');
-      return null;
-    } catch (e, stackTrace) {
-      ErrorLogger.log(e, stackTrace: stackTrace, context: 'Firestore - Get User Unknown');
-      return null;
+      if (response != null) {
+         // Cache
+         await box.put('profile_$uid', response);
+         return AppUser.fromMap(response, uid);
+      }
+    } catch (e) {
+      debugPrint('Firestore getUser failed (Offline?): $e');
     }
+    
+    // 2. Fallback to Cache
+    final cached = box.get('profile_$uid');
+    if (cached != null) {
+       debugPrint('✅ Loaded profile from cache: $uid');
+       return AppUser.fromMap(Map<String, dynamic>.from(cached), uid);
+    }
+    
+    return null;
   }
 
   Future<void> updateUser(AppUser user) async {
@@ -199,6 +211,18 @@ class FirestoreService {
       // However, preventing the whole operation due to Log failure is annoying.
       // We'll catch and print.
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 🚪 VISITOR REQUESTS (Specific)
+  // ---------------------------------------------------------------------------
+  
+  Stream<Map<String, dynamic>?> getVisitorRequestForApproval(String requestId) {
+    return _client
+        .from('visitor_requests')
+        .stream(primaryKey: ['id'])
+        .eq('id', requestId)
+        .map((events) => events.isNotEmpty ? events.first : null);
   }
 
   // ===========================================================================
@@ -409,6 +433,7 @@ class FirestoreService {
   Future<void> updateVisitorStatus(String id, String status) async {
     await _client.from('visitors').update({
       'status': status,
+      if (status == 'approved') 'approved_at': DateTime.now().toUtc().toIso8601String(),
       if (status == 'inside' || status == 'entered') 'entry_time': DateTime.now().toUtc().toIso8601String(),
       if (status == 'exited') 'exit_time': DateTime.now().toUtc().toIso8601String(),
     }).eq('id', id);
@@ -444,20 +469,37 @@ class FirestoreService {
   Future<void> markPassUsed(String id) async {
     await _client.from('guest_passes').update({
        'is_used': true,
-       'used_at': DateTime.now().toIso8601String(),
+       'used_at': DateTime.now().toUtc().toIso8601String(),
     }).eq('id', id);
 
-    // Also create a Visitor Log entry
+    // Fetch Pass & Resident Details
     final pass = await _client.from('guest_passes').select().eq('id', id).maybeSingle();
+    
     if (pass != null) {
+       final residentId = pass['resident_id'];
+       final resident = await _client.from('profiles').select('wing, flat_number').eq('id', residentId).maybeSingle();
+       
+       // Create Visitor Log
        await _client.from('visitors').insert({
-         'resident_id': pass['resident_id'],
+         'resident_id': residentId,
          'visitor_name': pass['visitor_name'],
          'purpose': 'Guest Pass',
-         'status': 'entered', // Auto-enter? Or 'approved'
-         'created_at': DateTime.now().toIso8601String(),
-         // Add other fields if needed
+         'status': 'entered',
+         'wing': resident?['wing'] ?? 'UNK', // Fallback if missing
+         'flat_number': resident?['flat_number'] ?? 'UNK',
+         'entry_time': DateTime.now().toUtc().toIso8601String(),
+         'created_at': DateTime.now().toUtc().toIso8601String(),
        });
+       
+       // 🔔 NOTIFY RESIDENT
+     await _client.from('notifications').insert({
+       'user_id': residentId,
+       'title': 'Guest Arrived 🏠',
+       'message': '${pass['visitor_name']} has entered using Guest Pass.',
+       'data': {'type': 'visitor_entry'},
+       'read': false,
+       'created_at': DateTime.now().toUtc().toIso8601String(),
+     });
     }
   }
   
@@ -774,11 +816,17 @@ class FirestoreService {
   // Guard Logic: Mark Entry/Exit
   Future<void> toggleStaffAttendance(String staffId, String ownerId, bool isEntry) async {
     // 1. Update Status
-    await _client.from('daily_help').update({
+    final Map<String, dynamic> updates = {
       'is_present': isEntry,
-      'last_entry_time': isEntry ? DateTime.now().toUtc().toIso8601String() : null,
-      'last_exit_time': !isEntry ? DateTime.now().toUtc().toIso8601String() : null,
-    }).eq('id', staffId);
+    };
+    
+    if (isEntry) {
+      updates['last_entry_time'] = DateTime.now().toUtc().toIso8601String();
+    } else {
+      updates['last_exit_time'] = DateTime.now().toUtc().toIso8601String();
+    }
+
+    await _client.from('daily_help').update(updates).eq('id', staffId);
 
     // 2. Log History
     await _client.from('staff_attendance_logs').insert({
@@ -787,6 +835,7 @@ class FirestoreService {
       'action': isEntry ? 'entry' : 'exit',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
     });
+    
   }
 
   // Get Logs
@@ -803,7 +852,7 @@ class FirestoreService {
     return _client
         .from('staff_attendance_logs')
         .stream(primaryKey: ['id'])
-        .order('timestamp', ascending: false)
-        .map((data) => data.where((log) => log['staff_id'] == staffId).toList());
+        .eq('staff_id', staffId)
+        .order('timestamp', ascending: false);
   }
 }

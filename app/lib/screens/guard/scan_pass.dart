@@ -6,6 +6,9 @@ import '../../services/firestore_service.dart';
 import '../../services/notification_service.dart';
 import '../../models/user.dart';
 import '../../utils/haptic_helper.dart';
+import 'package:otp/otp.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ScanPassScreen extends ConsumerStatefulWidget {
   const ScanPassScreen({super.key});
@@ -22,6 +25,7 @@ class _ScanPassScreenState extends ConsumerState<ScanPassScreen> with SingleTick
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
+    _syncOfflineData();
   }
 
   @override
@@ -30,20 +34,99 @@ class _ScanPassScreenState extends ConsumerState<ScanPassScreen> with SingleTick
     super.dispose();
   }
 
+  Future<void> _syncOfflineData() async {
+     final box = Hive.box('user_cache');
+    
+     // 1. Secrets (For Verification)
+     try {
+       final res = await Supabase.instance.client.from('identity_secrets').select('id, secret');
+       final Map<String, dynamic> secrets = {};
+       for (final row in res) {
+         secrets[row['id']] = row['secret'];
+       }
+       await box.put('guard_secrets_cache', secrets);
+       debugPrint('✅ Synced ${res.length} secrets');
+     } catch (e) {
+       debugPrint('Secrets Sync Fail: $e');
+     }
+
+     // 2. Profiles (For Display)
+     try {
+       final res = await Supabase.instance.client.from('profiles').select();
+       final Map<String, dynamic> profiles = {};
+       for (final row in res) {
+         profiles[row['id']] = row;
+       }
+       await box.put('guard_profiles_cache', profiles);
+       debugPrint('✅ Synced ${res.length} profiles');
+     } catch (e) {
+       debugPrint('Profiles Sync Fail: $e');
+     }
+  }
+
+  Future<AppUser?> _getUserOffline(String uid) async {
+     try {
+       // Online First
+       return await ref.read(firestoreServiceProvider).getUser(uid);
+     } catch (e) {
+       // Offline Fallback
+       final box = Hive.box('user_cache');
+       final cacheMap = box.get('guard_profiles_cache');
+       if (cacheMap != null && cacheMap is Map && cacheMap.containsKey(uid)) {
+          final data = Map<String, dynamic>.from(cacheMap[uid]);
+          return AppUser.fromMap(data, uid);
+       }
+     }
+     return null;
+  }
+
+  Future<bool> _verifyTOTP(String uid, String code) async {
+    final box = Hive.box('user_cache');
+    String? secret;
+
+    // 1. Try Cache
+    final cacheMap = box.get('guard_secrets_cache');
+    if (cacheMap != null && cacheMap is Map) {
+       secret = cacheMap[uid];
+    }
+    
+    // 2. Try Online if missing
+    if (secret == null) {
+       try {
+         final res = await Supabase.instance.client
+           .from('identity_secrets')
+           .select('secret')
+           .eq('id', uid)
+           .maybeSingle();
+         if (res != null) secret = res['secret'];
+       } catch (e) {
+         debugPrint('Online secret fetch failed: $e');
+       }
+    }
+    
+    if (secret == null) return false;
+    
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final validCode = OTP.generateTOTPCodeString(secret, now, length: 6, interval: 30);
+    final validCodePrev = OTP.generateTOTPCodeString(secret, now - 30000, length: 6, interval: 30);
+    
+    return (code == validCode || code == validCodePrev);
+  }
+
   Future<void> _onDetect(BarcodeCapture capture) async {
     if (_isProcessing) return;
     
     final List<Barcode> barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
 
-    final String? token = barcodes.first.rawValue;
-    if (token == null) return;
+    final code = barcodes.first.rawValue;
+    if (code == null) return;
 
     setState(() => _isProcessing = true);
 
     try {
       final firestore = ref.read(firestoreServiceProvider);
-      final scanData = token.trim();
+      final scanData = code.trim();
 
       // 1. Try Guest Pass First
       final pass = await firestore.getGuestPassByToken(scanData);
@@ -84,20 +167,21 @@ class _ScanPassScreenState extends ConsumerState<ScanPassScreen> with SingleTick
              // MARK USED ONLY ON CONFIRMATION
              await firestore.markGuestPassUsed(pass.id);
              
-             try {
-                final notificationService = ref.read(notificationServiceProvider);
-                // Notify ALL residents of the flat (Owners + Family)
-                await notificationService.notifyFlat(
-                  wing: pass.wing ?? '',
-                  flatNumber: pass.flatNumber ?? '',
-                  title: 'Guest Arrived',
-                  message: '${pass.visitorName} (${pass.guestCount} ppl) has entered.',
-                  visitorId: pass.id,
-                );
-             } catch (e) {
-                debugPrint('Failed notify: $e');
-             }
-             if (mounted) Navigator.pop(context); // Close dialog
+             // Unblock UI: Send Notification asynchronously (Fire & Forget)
+             final notificationService = ref.read(notificationServiceProvider);
+             notificationService.notifyFlat(
+                wing: pass.wing ?? '',
+                flatNumber: pass.flatNumber ?? '',
+                title: 'Guest Arrived',
+                message: '${pass.visitorName} (${pass.guestCount} ${pass.guestCount == 1 ? "person" : "people"}) has entered.',
+                visitorId: pass.id,
+             ).onError((error, stackTrace) {
+                debugPrint('❌ Notify Error: $error');
+             });
+
+             if (mounted) Navigator.pop(context); // Close dialog IMMEDIATELY
+             // 🔄 Reset Processing Flag to allow next scan
+             if (mounted) setState(() => _isProcessing = false);
           }
         );
         return;
@@ -106,16 +190,35 @@ class _ScanPassScreenState extends ConsumerState<ScanPassScreen> with SingleTick
       // 2. Try Resident ID (If not guest pass)
       String userIdToFetch = scanData;
       
-      // Handle Digital ID Format (AUTH:UID:DIGEST)
-      if (scanData.startsWith('AUTH:')) {
+      // Handle Digital ID Format: TOTP (UID|CODE) or Legacy (AUTH:UID:HMAC)
+      if (scanData.contains('|')) {
+         final parts = scanData.split('|');
+         if (parts.length == 2) {
+            final uid = parts[0];
+            final code = parts[1];
+            
+            // 🔐 OKAY TO VERIFY OFFLINE
+            final isValid = await _verifyTOTP(uid, code);
+            
+            if (!isValid) {
+               HapticHelper.heavyImpact();
+               if (mounted) _showResult(false, 'Invalid/Expired Code', 'Please ask resident to refresh QR');
+               // NOTE: _showResult resets _isProcessing via its onConfirm
+               return;
+            }
+            
+            // Valid! Proceed to fetch user details (Offline capable if profile cached?)
+            userIdToFetch = uid;
+         }
+      } 
+      else if (scanData.startsWith('AUTH:')) {
         final parts = scanData.split(':');
         if (parts.length >= 2) {
           userIdToFetch = parts[1];
-          // TODO: Verify digest/HMAC for security if needed (parts[2])
         }
       }
 
-      final AppUser? user = await firestore.getUser(userIdToFetch);
+      final AppUser? user = await _getUserOffline(userIdToFetch);
 
       if (user != null && user.role == 'resident') {
         // --- RESIDENT VERIFICATION LOGIC ---
@@ -130,7 +233,11 @@ class _ScanPassScreenState extends ConsumerState<ScanPassScreen> with SingleTick
           flatInfo: '',    // Hidden for privacy
           photoUrl: user.photoUrl,
           isGuest: false,
-          onConfirm: () => Navigator.pop(context), 
+          onConfirm: () {
+             Navigator.pop(context);
+             // 🔄 Reset Processing Flag
+             if (mounted) setState(() => _isProcessing = false);
+          }, 
         );
         return;
       }
@@ -169,12 +276,7 @@ class _ScanPassScreenState extends ConsumerState<ScanPassScreen> with SingleTick
                   final notificationService = ref.read(notificationServiceProvider);
                   await notificationService.notifyUser(
                     userId: staff['owner_id'],
-                    title: isInside ? 'Househelp Left' : 'Househelp Arrived', // Logic inverted: !isInside means they are ENTERING if they were outside
-                    // Wait, !isInside is the NEW status? 
-                    // No. toggleStaffAttendance sets 'is_present' to value passed.
-                    // If current isInside = true, we pass !isInside (false). So they Left.
-                    // If current isInside = false, we pass !isInside (true). So they Arrived.
-                    
+                    title: isInside ? 'Househelp Left' : 'Househelp Arrived', 
                     message: '${staff['name']} has ${isInside ? 'left' : 'entered'} the society.',
                     data: {'type': 'staff_attendance', 'staff_id': staffId},
                   );
@@ -187,6 +289,8 @@ class _ScanPassScreenState extends ConsumerState<ScanPassScreen> with SingleTick
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('✅ Marked ${isInside ? "Exit" : "Entry"} for ${staff['name']}'))
                   );
+                  // 🔄 Reset Processing Flag
+                  setState(() => _isProcessing = false);
                }
              }
            );

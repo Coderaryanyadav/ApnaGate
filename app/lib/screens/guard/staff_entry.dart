@@ -23,6 +23,7 @@ class StaffEntryScreen extends ConsumerStatefulWidget {
 class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  final Set<String> _processingIds = {}; // Prevent double tap
 
   @override
   Widget build(BuildContext context) {
@@ -106,14 +107,13 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
                    final matchFlat = p.flat?.toLowerCase().contains(_searchQuery) ?? false;
                    final isMatch = matchName || matchCat || matchFlat;
 
-                   // 🛑 Logic: 
-                   // - Service Providers (Guard, Driver): Always show (or filter by search if typed)
-                   // - Daily Help (Maids): ONLY show if Search is typed (hide by default to declutter)
-                   
-                   if (_searchQuery.isEmpty) {
-                     return !p.isDailyHelp; // Show only Service Providers by default
+                   // 🛡️ FILTER: Hide Daily Help (Maids) by Default
+                   // User Requirement: "everyone housedhelp must not show only building woker added by admin msut only show"
+                   // Exception: Show if searching OR if they are currently IN (so they can be checked out)
+                   if (p.isDailyHelp && _searchQuery.isEmpty && p.status != 'in') {
+                     return false;
                    }
-                   
+
                    return isMatch;
                 }).toList();
 
@@ -170,6 +170,7 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
                                 child: ElevatedButton(
                                   onPressed: () {
                                     if (staff.isDailyHelp) {
+                                      if (_processingIds.contains(staff.id)) return; // Debounce
                                       // Direct Toggle for Daily Help (We know the flat)
                                       _toggleDailyHelp(staff);
                                     } else {
@@ -185,7 +186,9 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                   padding: const EdgeInsets.symmetric(horizontal: 0),
                                 ),
-                                child: Text(isIn ? 'CHECK OUT' : 'CHECK IN', style: const TextStyle(fontSize: 12)),
+                                child: _processingIds.contains(staff.id) 
+                                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                    : Text(isIn ? 'CHECK OUT' : 'CHECK IN', style: const TextStyle(fontSize: 12)),
                               ),
                             ),
                           ],
@@ -212,8 +215,14 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
     // ignore: deprecated_member_use, unawaited_futures
     HapticFeedback.mediumImpact();
     
-    final isEntry = staff.status != 'in'; // Toggle
+    setState(() => _processingIds.add(staff.id)); // Lock
     
+    final isEntry = staff.status != 'in'; // Toggle
+    // Collapse ID: staff_status_<ID>_<DATE> (e.g. staff_status_123_2023-12-12)
+    // Actually, making it unique per minute helps prevent loops but allows re-entry if needed
+    // Using a fixed ID per ACTION ensures deduplication
+    final collapseId = 'staff_${staff.id}_${isEntry ? 'in' : 'out'}_${DateTime.now().minute}';
+
     try {
       if (staff.ownerId == null) throw Exception('Owner ID missing');
 
@@ -228,31 +237,42 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
         await ref.read(notificationServiceProvider).notifyFlat(
           wing: staff.wing!,
           flatNumber: staff.flat!,
-          title: 'Daily Help Entry',
+          title: 'Weekly Help Entry',
           message: '${staff.name} (${staff.category}) has clocked IN.',
+          collapseId: collapseId,
+        );
+
+        // Notify Admins
+         await ref.read(notificationServiceProvider).notifyAdmins(
+          title: 'Staff Check-In',
+          message: '${staff.name} (${staff.category}) entered for ${staff.wing}-${staff.flat}',
+          data: {'collapse_id': collapseId},
         );
       } else if (!isEntry && staff.wing != null && staff.flat != null) {
-         // Optional: Notify exit
-         /*
+         // Notify Exit
          await ref.read(notificationServiceProvider).notifyFlat(
           wing: staff.wing!,
           flatNumber: staff.flat!,
-          title: 'Daily Help Exit',
+          title: 'Weekly Help Exit',
           message: '${staff.name} (${staff.category}) has clocked OUT.',
+          collapseId: collapseId,
         );
-        */
+
+        // Notify Admins
+         await ref.read(notificationServiceProvider).notifyAdmins(
+          title: 'Staff Check-Out',
+          message: '${staff.name} (${staff.category}) exited from ${staff.wing}-${staff.flat}',
+          data: {'collapse_id': collapseId},
+        );
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${staff.name} Marked ${isEntry ? "IN" : "OUT"}'),
-            backgroundColor: isEntry ? Colors.green : Colors.red,
-          ),
-        );
+        _showPremiumStatusUpdate(context, '${staff.name} Marked ${isEntry ? "IN" : "OUT"}', isEntry);
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _processingIds.remove(staff.id)); // Unlock
     }
   }
 
@@ -290,16 +310,72 @@ class _StaffEntryScreenState extends ConsumerState<StaffEntryScreen> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${staff.name} Marked ${newStatus.toUpperCase()}'),
-            backgroundColor: newStatus == 'in' ? Colors.green : Colors.red,
-          ),
-        );
+        _showPremiumStatusUpdate(context, '${staff.name} Marked ${newStatus.toUpperCase()}', newStatus == 'in');
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }
+  }
+
+  void _showPremiumStatusUpdate(BuildContext context, String message, bool isSuccess) {
+    ScaffoldMessenger.of(context).clearSnackBars(); // Clear previous
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        duration: const Duration(seconds: 2),
+        content: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isSuccess 
+                  ? [const Color(0xFF00C853), const Color(0xFF69F0AE)] 
+                  : [const Color(0xFFD32F2F), const Color(0xFFFF5252)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: (isSuccess ? Colors.green : Colors.red).withValues(alpha: 0.3),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isSuccess ? Icons.check_circle : Icons.logout,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+      ),
+    );
   }
 
   void _showCheckInDialog(ServiceProvider staff) {

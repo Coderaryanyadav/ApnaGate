@@ -7,11 +7,13 @@ import '../../services/firestore_service.dart';
 import '../../models/extras.dart';
 import '../../widgets/banner_ad_widget.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import '../../services/notification_service.dart'; // Added
 import 'package:flutter_background_service/flutter_background_service.dart'; // Added
 import 'package:supabase_flutter/supabase_flutter.dart'; // Added
 import '../../models/user.dart';
 import '../../utils/app_routes.dart';
 import '../../utils/app_constants.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 
 
@@ -25,7 +27,6 @@ class ResidentHome extends ConsumerStatefulWidget {
 class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBindingObserver {
   static bool _hasSetupOneSignal = false;
   static bool _hasShownNoticePopupThisSession = false;
-  bool _isFirstLoad = true; // Added for silent catch-up
 
   final Set<String> _handledNotificationIds = {}; // Local deduplication
   Timer? _refreshTimer;
@@ -101,64 +102,96 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
           .eq('user_id', user.id) // 🔒 CRITICAL: Server-side filtering
           .order('created_at', ascending: false) // Latest first
           .limit(20) // Optimization
-          .listen((data) {
-             // 1. Filter Unread
+            .listen((data) async {
+             // 1. Get SharedPrefs instance (Quick access)
+             final prefs = await SharedPreferences.getInstance();
+             final List<String> handledList = prefs.getStringList('handled_notifications') ?? [];
+             final Set<String> persistedHandledIds = handledList.toSet();
+
+             // 2. Filter Unread
             final userNotifications = data.where((n) => 
               n['read'] == false &&
-              !_handledNotificationIds.contains(n['id'])
+              !_handledNotificationIds.contains(n['id']) &&
+              !persistedHandledIds.contains(n['id']) // Check persistent storage
             ).toList();
             
             if (userNotifications.isNotEmpty) {
               for (var notification in userNotifications) {
-                 _handledNotificationIds.add(notification['id']); // Mark handled locally
+                 final String nId = notification['id'];
+                 _handledNotificationIds.add(nId); 
                  
-                 // 2. Suppress Alerts on Startup (Silent Catch-up)
-                 if (_isFirstLoad) {
-                   debugPrint('🤫 Startup: Silently marking notification as read: ${notification['title']}');
-                   // Just mark read, no alert
-                   supabase.from('notifications').update({'read': true}).eq('id', notification['id']);
-                   continue;
-                 }
+                 // Persist immediately to prevent future dupes
+                 persistedHandledIds.add(nId);
+                 await prefs.setStringList('handled_notifications', persistedHandledIds.toList());
 
-                // 🛑 CHECK FRESHNESS (Backup for runtime): Don't alert if older than 5 mins
+                // 🛑 CHECK FRESHNESS V3 (Strict 3 Minute Window)
                 final createdAtStr = notification['created_at'];
                 if (createdAtStr != null) {
-                    final created = DateTime.tryParse(createdAtStr);
-                    if (created != null && DateTime.now().difference(created).inMinutes > 5) {
-                         supabase.from('notifications').update({'read': true}).eq('id', notification['id']);
-                         continue; 
+                    final created = DateTime.tryParse(createdAtStr)?.toUtc(); 
+                    final now = DateTime.now().toUtc();
+                    
+                    if (created != null) {
+                       final diffInMinutes = now.difference(created).inMinutes.abs();
+                       // If older than 3 mins, ignore completely
+                       if (diffInMinutes > 3) {
+                           await supabase.from('notifications').update({'read': true}).eq('id', nId);
+                           continue; 
+                       }
                     }
                 }
 
-                // 3. Show Alert (Runtime Only)
-                 _showLocalNotification(
-                  notification['title'] ?? 'New Notification',
-                  notification['message'] ?? '',
-                );
+                // 3. Show Alert
+                final bool isSOS = (notification['title'] ?? '').toString().contains('SOS') || 
+                                   (notification['data'] != null && notification['data']['type'] == 'sos_alert');
                 
-                // 4. Mark Read
-                supabase
+                final bool isVisitor = (notification['data'] != null && notification['data']['type'] == 'visitor_arrival');
+
+                // 🛑 PREVENT DUPLICATE: OneSignal handles Push. Dialog handles Foreground Visitor.
+                // We only show Local Notification if it's SOS (Redundancy) or a generic system alert.
+                // We do NOT show it for visitors to avoid "double ping".
+                if (isSOS || !isVisitor) {
+                   await _showLocalNotification(
+                    notification['title'] ?? 'New Notification',
+                    notification['message'] ?? '',
+                    isSOS: isSOS,
+                  );
+                }
+
+                // 🚀 IMMEDIATE ACTION: Show Approval Dialog if Visitor Arrival
+                if (notification['data'] != null && 
+                    notification['data']['type'] == 'visitor_arrival' && 
+                    notification['data']['visitor_id'] != null) {
+                    Future.delayed(const Duration(milliseconds: 500), () {
+                       if (mounted) {
+                          _showIncomingVisitorDialog(notification['data']['visitor_id']);
+                       }
+                    });
+                }
+                
+                // 4. Mark Read (Best Effort)
+                // We rely on local prefs for immediate dedup
+                await supabase
                     .from('notifications')
                     .update({'read': true})
-                    .eq('id', notification['id']);
+                    .eq('id', nId);
               }
-            }
-            // After processing first batch, disable suppression
-            if (_isFirstLoad) {
-               _isFirstLoad = false;
             }
           });
     }
 
     
-    // OneSignal Setup (Once)
+    // 1. OneSignal Setup (Critical for SOS)
     if (!_hasSetupOneSignal) {
       _hasSetupOneSignal = true;
-      _setupOneSignal();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _setupOneSignal();
+        // 🗑️ AGGRESSIVE CLEANUP: Clear system tray on app open
+        OneSignal.Notifications.clearAll();
+        _startBackgroundMonitor(); // Start background monitoring for SOS
+      });
     }
     
     _initLocalNotifications();
-    _startBackgroundMonitor(); // Start BG Service
     
     // Global Auto-Refresh
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
@@ -216,22 +249,29 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
     await _localNotifications.initialize(initSettings);
   }
 
-  Future<void> _showLocalNotification(String title, String body) async {
-    const androidDetails = AndroidNotificationDetails(
-      'visitor_notifications',
-      'Visitor Notifications',
-      channelDescription: 'Notifications for visitor arrivals',
+  Future<void> _showLocalNotification(String title, String body, {bool isSOS = false}) async {
+    final androidDetails = AndroidNotificationDetails(
+      isSOS ? 'sos_alerts_v2' : 'visitor_notifications',
+      isSOS ? '🚨 SOS ALERTS' : 'Visitor Notifications',
+      channelDescription: isSOS ? 'Emergency High Priority Alerts' : 'Notifications for visitor arrivals',
       importance: Importance.max,
       priority: Priority.high,
-      sound: RawResourceAndroidNotificationSound('notification'),
+      playSound: true,
+      enableVibration: true,
+      sound: isSOS ? const RawResourceAndroidNotificationSound('alarm') : const RawResourceAndroidNotificationSound('notification'),
+      fullScreenIntent: isSOS, // 🚨 Try to wake screen for SOS
+      category: isSOS ? AndroidNotificationCategory.alarm : AndroidNotificationCategory.event,
     );
-    const iosDetails = DarwinNotificationDetails(
+    
+    final iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
-      sound: 'notification.wav',
+      sound: isSOS ? 'alarm.wav' : 'notification.wav', // Ensure these exist or fallback
+      interruptionLevel: isSOS ? InterruptionLevel.critical : InterruptionLevel.active,
     );
-    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+    
+    final details = NotificationDetails(android: androidDetails, iOS: iosDetails);
     
     await _localNotifications.show(
       DateTime.now().millisecondsSinceEpoch ~/ 1000,
@@ -239,15 +279,10 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
       body,
       details,
     );
-    debugPrint('🔔 Local notification shown: $title');
+    debugPrint('🔔 Local notification shown (SOS: $isSOS): $title');
   }
 
-  void _setupVisitorListener() {
-    // 🛑 FOREGROUND NOTIFICATIONS DISABLED
-    // We rely on background_service.dart for all visitor notifications
-    // to prevent dual-alerting and hot-restart loops.
-    // The background service is robust, persistent, and strict.
-  }
+
 
   Future<void> _startBackgroundMonitor() async {
     final service = FlutterBackgroundService();
@@ -277,7 +312,18 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
     await OneSignal.login(user.id);
     await OneSignal.User.addTagWithKey('role', 'resident');
     
-    // Get flat number from Firestore (background task)
+    // LISTEN FOR CLICKS (Background -> Foreground transition)
+    OneSignal.Notifications.addClickListener((event) {
+       final data = event.notification.additionalData;
+       if (data != null && data['visitor_id'] != null) {
+          debugPrint('🖱️ Notification Clicked! Opening dialog for ${data['visitor_id']}');
+          // Slight delay to allow app to settle
+          Future.delayed(const Duration(milliseconds: 500), () {
+             _showIncomingVisitorDialog(data['visitor_id']);
+          });
+       }
+    });
+    
     // Get flat number from Firestore (background task)
     try {
       final userProfile = await ref.read(firestoreServiceProvider).getUser(user.id);
@@ -290,6 +336,40 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
         }
       }
     } catch (_) {} // Silent fail
+  }
+
+  void _setupVisitorListener() {
+    // 🔔 REALTIME VISITOR POPUP (Foreground Only)
+    // Watches for NEW 'pending' requests that arrive while app is open.
+    final myUserId = ref.read(authServiceProvider).currentUser?.id;
+    if (myUserId == null) return;
+
+    _visitorSub?.cancel(); // Cancel strict previous
+
+    _visitorSub = Supabase.instance.client
+        .from('visitor_requests')
+        .stream(primaryKey: ['id'])
+        .eq('resident_id', myUserId)
+        .listen((List<Map<String, dynamic>> requests) {
+           if (!mounted) return;
+           
+           for (var req in requests) {
+              // 1. Status Check
+              if (req['status'] != 'pending') continue;
+              // 2. Freshness Check (Strict 45s)
+              // We only popup for GENUINELY NEW requests.
+              // Old pending requests (missed) will not auto-popup.
+              final created = DateTime.tryParse(req['created_at']);
+              if (created != null && DateTime.now().toUtc().difference(created.toUtc()).inSeconds.abs() < 45) {
+                  // Check if we already handled this locally to be ultra-safe
+                  if (!_handledNotificationIds.contains(req['id'])) {
+                      _handledNotificationIds.add(req['id']);
+                      debugPrint('⚡ Realtime Visitor Detected: ${req['id']}');
+                      _showIncomingVisitorDialog(req['id']);
+                  }
+              }
+           }
+        });
   }
 
   Future<void> _checkAndShowLatestNotice() async {
@@ -387,6 +467,208 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
     );
   }
 
+  // 🚪 Visitor Approval Dialog - ROBOTIZED V2
+  Future<void> _showIncomingVisitorDialog(String visitorId) async {
+    // 🛡️ SECURITY CHECK: Prevent "Zombie" Dialogs
+    // Check if this request is still pending. If already approved/rejected, ABORT.
+    try {
+      final request = await ref.read(firestoreServiceProvider).getVisitorRequestForApproval(visitorId).first;
+
+      if (request == null) return; // Request invalid/deleted
+      
+      final String status = request['status'] ?? 'pending';
+      if (status != 'pending') {
+        debugPrint('⚠️ Request $visitorId is already $status. suppressing dialog.');
+         return; 
+      }
+      
+      // Request is valid and pending. Continue to show dialog.
+      final visitorName = request['name'] ?? request['visitor_name'] ?? 'Visitor';
+      final purpose = request['purpose'] ?? 'Visit';
+      final photoUrl = request['photo_url'];
+
+      if (!mounted) return;
+
+      final bool? result = await showGeneralDialog<bool>(
+        context: context,
+        barrierDismissible: false, // Must take action
+        barrierLabel: 'Incoming Visitor',
+        barrierColor: Colors.black.withValues(alpha: 0.9),
+        transitionDuration: const Duration(milliseconds: 400),
+        pageBuilder: (ctx, anim1, anim2) => Container(),
+        transitionBuilder: (ctx, anim1, anim2, child) {
+          return ScaleTransition(
+            scale: CurvedAnimation(parent: anim1, curve: Curves.elasticOut),
+            child: FadeTransition(
+              opacity: anim1,
+              child: AlertDialog(
+                backgroundColor: const Color(0xFF1E1E2C), // Premium Dark
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  side: const BorderSide(color: Colors.indigoAccent, width: 2),
+                ),
+                contentPadding: EdgeInsets.zero,
+                content: SizedBox(
+                   width: MediaQuery.of(context).size.width * 0.85,
+                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header Image
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            height: 180,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+                              image: photoUrl != null 
+                                ? DecorationImage(image: NetworkImage(photoUrl), fit: BoxFit.cover, opacity: 0.8)
+                                : null
+                            ),
+                            child: photoUrl == null 
+                              ? const Icon(Icons.person, size: 80, color: Colors.indigoAccent)
+                              : null,
+                          ),
+                          // Overlay Gradient
+                          Positioned.fill(
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+                                gradient: LinearGradient(
+                                  colors: [Colors.transparent, Color(0xFF1E1E2C)],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 10,
+                            child: Text(
+                              visitorName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                                shadows: [BoxShadow(color: Colors.black, blurRadius: 10)]
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 16),
+                      // Purpose
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.indigoAccent.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.indigoAccent.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          '$purpose',
+                          style: const TextStyle(color: Colors.indigoAccent, fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 32),
+                      
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          // Deny Button
+                           _buildActionBtn(
+                             icon: Icons.close, 
+                             label: 'DENY', 
+                             color: Colors.redAccent, 
+                             onTap: () => Navigator.pop(ctx, false)
+                          ),
+                          
+                          // Approve Button
+                           _buildActionBtn(
+                             icon: Icons.check, 
+                             label: 'APPROVE', 
+                             color: Colors.greenAccent, 
+                             onTap: () => Navigator.pop(ctx, true)
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+                    ],
+                   ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+      
+      if (result != null) {
+        final guardId = request['guard_id'];
+        await _processVisitor(visitorId, result, guardId: guardId, visitorName: visitorName);
+      }
+    } catch (e) {
+      debugPrint('Error fetch visitor request status: $e');
+    }
+  }
+
+  Widget _buildActionBtn({required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
+     return GestureDetector(
+       onTap: onTap,
+       child: Column(
+         children: [
+           Container(
+             width: 60, height: 60,
+             decoration: BoxDecoration(
+               color: color.withValues(alpha: 0.2),
+               shape: BoxShape.circle,
+               border: Border.all(color: color, width: 2),
+               boxShadow: [BoxShadow(color: color.withValues(alpha: 0.2), blurRadius: 12)]
+             ),
+             child: Icon(icon, color: color, size: 30),
+           ),
+           const SizedBox(height: 8),
+           Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+         ],
+       ),
+     );
+  }
+
+  Future<void> _processVisitor(String id, bool approved, {String? guardId, String? visitorName}) async {
+      try {
+        final status = approved ? 'approved' : 'rejected';
+        
+        // Update DB
+        await ref.read(firestoreServiceProvider).updateVisitorStatus(id, status);
+        
+        // 🔔 Notify Guard (if applicable)
+        if (guardId != null) {
+           await ref.read(notificationServiceProvider).notifyUser(
+             userId: guardId,
+             title: 'Visitor $status',
+             message: '${visitorName ?? "Visitor"} has been $status by Resident.',
+             data: {'type': 'visitor_update', 'visitor_id': id, 'status': status},
+           );
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Visitor $status successfully!'),
+              backgroundColor: approved ? Colors.green : Colors.red,
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(16),
+            )
+          );
+        }
+      } catch (e) {
+         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+  }
+
 // ...
 
   @override
@@ -445,8 +727,8 @@ class _ResidentHomeState extends ConsumerState<ResidentHome> with WidgetsBinding
               onTap: () => ref.read(authServiceProvider).signOut(),
             ),
             const Divider(color: Colors.white12),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24.0),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24.0),
               child: Center(
                 child: Text(
                   'Crafted by Aryan',

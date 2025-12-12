@@ -28,4 +28,6 @@ class AppRoutes {
   // New Routes
   static const String authWrapper = '/auth';
   static const String staffEntry = '/guard/staff-entry';
+  static const String patrol = '/guard/patrol';
+  static const String patrolLogs = '/admin/patrol-logs';
 }

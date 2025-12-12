@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'app.dart';
 import 'services/ads_service.dart';
 import 'supabase_config.dart';
@@ -23,6 +24,11 @@ void main() async {
   await runZonedGuarded(() async {
     // Init Background Service (Config only)
     await initializeBackgroundService();
+
+    // 📦 Init Hive (Offline Cache)
+    await Hive.initFlutter();
+    await Hive.openBox('user_cache');
+    await Hive.openBox('patrol_logs'); // For logs
     
     // ONLY critical initialization - everything else lazy loaded
     await Supabase.initialize(
@@ -93,15 +99,59 @@ Future<void> _initOneSignalBackground() async {
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
         
     await androidPlugin?.createNotificationChannel(serviceChannel); // Create Silent
-    await androidPlugin?.createNotificationChannel(channel);        // Create Loud
+    await androidPlugin?.createNotificationChannel(channel);        // Create SOS Loud
+
+    // 🔔 3. Create Standard Channel (v1) with High Importance as well
+    // This fixes the "Guest Arrived" sound/delay issue by ensuring it's not treated as low priority
+    const AndroidNotificationChannel standardChannel = AndroidNotificationChannel(
+      'apna_gate_alarm_v1', // Standard channel used by backend
+      'Visitor Notifications',
+      description: 'Notifications for guest arrivals',
+      importance: Importance.max, // High importance to pop up
+      playSound: true,
+      sound: RawResourceAndroidNotificationSound('notification'),
+      enableVibration: true,
+    );
+    await androidPlugin?.createNotificationChannel(standardChannel);
 
     // Force notification to show in foreground with Sound
     OneSignal.Notifications.addForegroundWillDisplayListener((event) {
-      // 🔊 Manual Sound Trigger for extra loudness (if asset exists)
-      // final player = AudioPlayer();
-      // player.play(AssetSource('sounds/alarm.mp3'));
+      bool shouldShow = true;
       
-      event.notification.display();
+      try {
+        final data = event.notification.additionalData;
+        
+        // 1. Strict Time Check (1 Minute Max)
+        if (data != null && data['created_at'] != null) {
+           final created = DateTime.tryParse(data['created_at'].toString())?.toUtc();
+           if (created != null) {
+              final int diff = DateTime.now().toUtc().difference(created).inMinutes.abs();
+              
+              if (diff > 1) { // 🛑 Strict 1 Minute Cutoff
+                 shouldShow = false; 
+                 debugPrint('🚫 Main: Suppressed OLD notification (${diff}m ago): ${event.notification.title}');
+              }
+           }
+        }
+        
+        // 2. Extra Safety: Status Check if present
+        if (data != null && data['status'] != null) {
+           final status = data['status'].toString().toLowerCase();
+           if (status == 'approved' || status == 'rejected' || status == 'completed') {
+              shouldShow = false;
+              debugPrint('🚫 Main: Suppressed PROCESSED notification ($status)');
+           }
+        }
+
+      } catch (e) {
+         // Default to show if parsing fails
+      }
+      
+      if (shouldShow) {
+         event.notification.display();
+      } else {
+         event.preventDefault(); // 🛑 HARD STOP
+      }
     });
   } catch (e) {
     // Silent fail

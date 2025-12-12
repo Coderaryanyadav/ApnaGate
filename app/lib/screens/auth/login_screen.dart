@@ -23,17 +23,52 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     
     setState(() => _isLoading = true);
     try {
+      debugPrint('🔐 Attempting login with: ${_emailController.text.trim()}');
       await ref.read(authServiceProvider).signInWithEmailAndPassword(
             _emailController.text.trim(),
             _passwordController.text.trim(),
           );
+      debugPrint('✅ Login successful!');
       // Navigation is handled by auth state changes in App
     } catch (e, stackTrace) {
+      debugPrint('❌ Login failed: $e');
+      debugPrint('Stack trace: $stackTrace');
       ErrorLogger.log(e, stackTrace: stackTrace, context: 'Login');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login failed: ${e.toString()}'), backgroundColor: Colors.red),
+        // Show detailed error in dialog
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Login Failed'),
+            content: SingleChildScrollView(
+              child: Text(
+                'Error: ${e.toString()}\n\n'
+                'Please check:\n'
+                '1. Email and password are correct\n'
+                '2. You ran MASTER_FIX.sql in Supabase\n'
+                '3. Your internet connection is working',
+                style: const TextStyle(fontSize: 14),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
         );
+        
+        // Also show snackbar
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Login failed: ${e.toString()}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

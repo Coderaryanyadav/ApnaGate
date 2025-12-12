@@ -11,6 +11,8 @@ import 'screens/auth/login_screen.dart';
 import 'screens/guard/staff_entry.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/admin/admin_extras.dart'; // Import this
+import 'screens/guard/patrol_screen.dart';
+import 'screens/admin/patrol_logs.dart';
 
 import 'screens/guard/guard_home.dart';
 import 'screens/resident/resident_home.dart';
@@ -62,6 +64,7 @@ class ApnaGateApp extends ConsumerWidget {
         AppRoutes.analytics: (context) => const AnalyticsDashboard(),
         AppRoutes.complaints: (context) => const ComplaintAdminScreen(), 
         AppRoutes.serviceProviders: (context) => const ServiceProviderAdminScreen(),
+        AppRoutes.patrolLogs: (context) => const PatrolLogsScreen(),
         
         // Guard Routes
         AppRoutes.guardHome: (context) => const GuardHome(),
@@ -69,6 +72,7 @@ class ApnaGateApp extends ConsumerWidget {
         AppRoutes.scanPass: (context) => const ScanPassScreen(),
         AppRoutes.visitorStatus: (context) => const VisitorStatusScreen(),
         AppRoutes.staffEntry: (context) => const StaffEntryScreen(),
+        AppRoutes.patrol: (context) => const PatrolScreen(),
         
         // Resident Routes
         AppRoutes.residentHome: (context) => const ResidentHome(),

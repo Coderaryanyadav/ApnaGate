@@ -26,7 +26,7 @@ Future<void> initializeBackgroundService() async {
     await service.configure(
       androidConfiguration: AndroidConfiguration(
         onStart: onStart,
-        autoStart: false,
+        autoStart: true,
         isForegroundMode: true, // Re-enabled to ensure alarms work
         notificationChannelId: 'apna_bg_service',
         initialNotificationTitle: 'ApnaGate Security',
@@ -34,7 +34,7 @@ Future<void> initializeBackgroundService() async {
         foregroundServiceNotificationId: 888,
       ),
       iosConfiguration: IosConfiguration(
-        autoStart: false,
+        autoStart: true,
         onForeground: onStart,
       ),
     );
@@ -62,7 +62,8 @@ Future<void> onStart(ServiceInstance service) async {
   // Subscription holders
   StreamSubscription? visitorSub;
   StreamSubscription? sosSub;
-  StreamSubscription? notificationSub; // For guest entry & househelp
+  StreamSubscription? notificationSub;
+  Timer? watchmanAlertTimer; // Night shift alerts
 
   // Listen for User Data
   service.on('start_monitoring').listen((event) {
@@ -76,6 +77,7 @@ Future<void> onStart(ServiceInstance service) async {
     visitorSub?.cancel();
     sosSub?.cancel();
     notificationSub?.cancel();
+    watchmanAlertTimer?.cancel();
     
     // Start visitor monitoring (for residents)
     visitorSub = _startVisitorStream(userId, token, localNotif);
@@ -83,9 +85,40 @@ Future<void> onStart(ServiceInstance service) async {
     // Start general notification monitoring (guest entry, househelp for all users)
     notificationSub = _startNotificationStream(userId, token, localNotif);
     
-    // Start SOS monitoring (for guards and admins)
+    // Start SOS monitoring + Watchman Alerts (for guards and admins)
     if (role == 'guard' || role == 'admin') {
       sosSub = _startSOSStream(token, localNotif);
+      
+      // Start watchman alert scheduler (checks time every minute)
+      // This ensures alerts fire exactly at 12:00, 12:30, 01:00... not just 30 mins from app start
+      watchmanAlertTimer = Timer.periodic(const Duration(minutes: 1), (timer) async {
+         final now = DateTime.now();
+         final minute = now.minute;
+         final hour = now.hour;
+         
+         // 1. Regular "Are you awake?" check at :00 and :30
+         // Fire only at :00 and :30, and only if seconds < 60
+         if ((minute == 0 || minute == 30)) {
+           await _checkAndTriggerWatchmanAlert(userId, token, localNotif);
+         }
+         
+         // 2. PATROL COMPLIANCE CHECKS (Strict 3-Scan Rule)
+         // Check at 02:00, 04:00, 06:00
+         if (minute == 0) {
+            if (hour == 2) {
+               await _checkPatrolCompliance(userId, token, localNotif, minScansRequired: 1, deadlineLabel: '2 AM');
+            } else if (hour == 4) {
+               await _checkPatrolCompliance(userId, token, localNotif, minScansRequired: 2, deadlineLabel: '4 AM');
+            } else if (hour == 6) {
+               await _checkPatrolCompliance(userId, token, localNotif, minScansRequired: 3, deadlineLabel: '6 AM');
+            }
+         }
+      });
+      
+      // Also check immediately on start/restart to catch missed slots
+      Future.delayed(const Duration(seconds: 5), () {
+        _checkAndTriggerWatchmanAlert(userId, token, localNotif);
+      });
     }
   });
 
@@ -97,6 +130,8 @@ Future<void> onStart(ServiceInstance service) async {
     sosSub = null;
     notificationSub?.cancel();
     notificationSub = null;
+    watchmanAlertTimer?.cancel();
+    watchmanAlertTimer = null;
   });
 }
 
@@ -149,22 +184,23 @@ StreamSubscription _startVisitorStream(String userId, String token, FlutterLocal
               alertedIds.add(id); 
               knownIds.add(id);
               
-              await notif.show(
-                notificationId,
-                '🔔 New Visitor',
-                '${visit['visitor_name']} is waiting',
-                const NotificationDetails(
-                  android: AndroidNotificationDetails(
-                    'apna_gate_alarm_v3',
-                    'Critical Alerts',
-                    importance: Importance.max,
-                    priority: Priority.max,
-                    playSound: true,
-                    sound: RawResourceAndroidNotificationSound('notification'),
-                    fullScreenIntent: true,
-                  ),
-                ),
-              );
+              // 🛑 DISABLED: Relying on OneSignal Push to avoid duplication
+              // await notif.show(
+              //   notificationId,
+              //   '🔔 New Visitor',
+              //   '${visit['visitor_name']} is waiting',
+              //   const NotificationDetails(
+              //     android: AndroidNotificationDetails(
+              //       'apna_gate_alarm_v3',
+              //       'Critical Alerts',
+              //       importance: Importance.max,
+              //       priority: Priority.max,
+              //       playSound: true,
+              //       sound: RawResourceAndroidNotificationSound('notification'),
+              //       fullScreenIntent: true,
+              //     ),
+              //   ),
+              // );
             }
           }
         } else {
@@ -202,28 +238,29 @@ StreamSubscription _startNotificationStream(String userId, String token, Flutter
           final created = DateTime.tryParse(createdAtStr)?.toUtc();
           if (created != null) {
             final age = DateTime.now().toUtc().difference(created);
-            if (age.inSeconds > 10) continue; // Only fresh notifications
+            if (age.inSeconds > 300) continue; // Allow notifications within 5 minutes (Fixed from 10s)
           }
         }
         
         handledIds.add(id);
         
-        await notif.show(
-          id.hashCode,
-          notification['title'] ?? 'Notification',
-          notification['message'] ?? '',
-          const NotificationDetails(
-            android: AndroidNotificationDetails(
-              'apna_gate_alarm_v3',
-              'Critical Alerts',
-              importance: Importance.max,
-              priority: Priority.max,
-              playSound: true,
-              sound: RawResourceAndroidNotificationSound('notification'),
-              fullScreenIntent: true,
-            ),
-          ),
-        );
+        // 🛑 DISABLED: Relying on OneSignal Push to avoid duplication
+        // await notif.show(
+        //   id.hashCode,
+        //   notification['title'] ?? 'Notification',
+        //   notification['message'] ?? '',
+        //   const NotificationDetails(
+        //     android: AndroidNotificationDetails(
+        //       'apna_gate_alarm_v3',
+        //       'Critical Alerts',
+        //       importance: Importance.max,
+        //       priority: Priority.max,
+        //       playSound: true,
+        //       sound: RawResourceAndroidNotificationSound('notification'),
+        //       fullScreenIntent: true,
+        //     ),
+        //   ),
+        // );
       }
     });
 }
@@ -254,7 +291,7 @@ StreamSubscription _startSOSStream(String token, FlutterLocalNotificationsPlugin
           final created = DateTime.tryParse(createdAtStr)?.toUtc();
           if (created != null) {
             final age = DateTime.now().toUtc().difference(created);
-            if (age.inSeconds > 30) continue; // Only very fresh SOS
+            if (age.inSeconds > 300) continue; // Alert if within last 5 minutes
           }
         }
         
@@ -284,4 +321,123 @@ StreamSubscription _startSOSStream(String token, FlutterLocalNotificationsPlugin
         );
       }
     });
+}
+
+/// Watchman Alert System - Check if it's night shift time and trigger alert
+Future<void> _checkAndTriggerWatchmanAlert(String userId, String token, FlutterLocalNotificationsPlugin notif) async {
+  // Check if current time is between 12 AM (00:00) and 6 AM (06:00)
+  final now = DateTime.now();
+  final currentHour = now.hour;
+  
+  // Only trigger during night shift (12 AM to 6 AM)
+  if (currentHour < 0 || currentHour >= 6) {
+    return; // Not night time
+  }
+  
+  try {
+    final client = SupabaseClient(
+      SupabaseConfig.url, 
+      SupabaseConfig.anonKey,
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    
+    // Create alert record in database (Let DB generate UUID)
+    final response = await client.from('watchman_alerts').insert({
+      'guard_id': userId,
+      'alert_time': DateTime.now().toUtc().toIso8601String(),
+      'status': 'pending',
+    }).select().single();
+    
+    final alertId = response['id'] as String;
+    
+    // Trigger full-screen notification
+    await notif.show(
+      alertId.hashCode,
+      '⏰ WATCHMAN ALERT',
+      'Are you awake? Tap to confirm!',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'apna_gate_alarm_v3',
+          'Watchman Alerts',
+          importance: Importance.max,
+          priority: Priority.max,
+          playSound: true,
+          sound: RawResourceAndroidNotificationSound('notification'),
+          fullScreenIntent: true,
+          enableVibration: true,
+          visibility: NotificationVisibility.public,
+          autoCancel: false, // Don't dismiss automatically
+          ongoing: true, // Keep it persistent
+        ),
+      ),
+    );
+    
+    debugPrint('Watchman alert triggered for guard: $userId');
+  } catch (e) {
+    debugPrint('Watchman alert error: $e');
+  }
+}
+
+/// PATROL COMPLIANCE CHECK
+/// Enforces minimum number of scans by specific times.
+Future<void> _checkPatrolCompliance(
+    String userId, 
+    String token, 
+    FlutterLocalNotificationsPlugin notif, 
+    {required int minScansRequired, required String deadlineLabel}) async {
+  
+  try {
+    final client = SupabaseClient(
+      SupabaseConfig.url, 
+      SupabaseConfig.anonKey,
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    // Using a simple "last 12 hours" window to catch the night shift scans
+    final since = DateTime.now().toUtc().subtract(const Duration(hours: 12)).toIso8601String();
+    
+    final response = await client.from('patrol_logs')
+        .select('id')
+        .eq('guard_id', userId)
+        .gte('created_at', since)
+        .count(CountOption.exact);
+        
+    final scanCount = response.count;
+    
+    if (scanCount < minScansRequired) {
+      // 🚨 FAILED COMPLIANCE - ALARM!
+      final alarmId = DateTime.now().millisecondsSinceEpoch;
+      
+      await notif.show(
+        alarmId,
+        '🚨 PATROL MISSED!',
+        'You have only done $scanCount scans. Required: $minScansRequired by $deadlineLabel. GO SCAN NOW!',
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'apna_gate_alarm_v3',
+            'Critical Alerts',
+            importance: Importance.max,
+            priority: Priority.max,
+            playSound: true,
+            sound: RawResourceAndroidNotificationSound('notification'), // Use SOS sound
+            fullScreenIntent: true,
+            enableVibration: true,
+            visibility: NotificationVisibility.public,
+            autoCancel: false,
+            ongoing: true, // Cannot dismiss easily
+            color: Color(0xFFFF0000), // RED
+            ledColor: Color(0xFFFF0000),
+            ledOnMs: 500,
+            ledOffMs: 500,
+          ),
+        ),
+      );
+      
+      debugPrint('Patrol Compliance Failed: $scanCount/$minScansRequired');
+    } else {
+      debugPrint('Patrol Compliance Passed: $scanCount/$minScansRequired');
+    }
+  } catch (e) {
+    debugPrint('Error checking patrol compliance: $e');
+  }
 }

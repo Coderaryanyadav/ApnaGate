@@ -98,9 +98,10 @@ class _ApprovalScreenState extends ConsumerState<ApprovalScreen> {
 
     try {
       // 3. Update DB
-      await ref.read(firestoreServiceProvider).updateVisitorStatus(request.id, status);
-      
-      // 4. Sync Dismissal: Clear notifications for ALL users
+    await ref.read(firestoreServiceProvider).updateVisitorStatus(request.id, status);
+    
+    // 4. Sync Dismissal: Clear notifications for ALL users
+    try {
       await ref.read(notificationServiceProvider).markAllNotificationsAsReadForVisitor(request.id);
       
       // 5. Notify Guard
@@ -112,31 +113,36 @@ class _ApprovalScreenState extends ConsumerState<ApprovalScreen> {
           data: {'type': 'visitor_status_update', 'requestId': request.id}
         );
       }
-      
+    } catch (e) {
+      debugPrint('⚠️ Notification failed, but approval saved: $e');
+      // Do NOT revert the approval. It is saved.
+    }
+    
+    if (context.mounted) {
+      HapticHelper.mediumImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Visitor $status successfully!'),
+          backgroundColor: status == 'approved' ? Colors.green : Colors.orange,
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  } catch (e) {
+    // Only revert if DB update failed
+    debugPrint('❌ Critical DB Error: $e');
+    if (mounted) {
+      setState(() {
+        _processedIds.remove(request.id);
+      });
+      HapticHelper.heavyImpact();
       if (context.mounted) {
-        HapticHelper.mediumImpact();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ Visitor $status successfully!'),
-            backgroundColor: status == 'approved' ? Colors.green : Colors.orange,
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
+          SnackBar(content: Text('❌ Error: $e'), backgroundColor: Colors.red),
         );
       }
-    } catch (e) {
-      // Revert if failed
-      if (mounted) {
-        setState(() {
-          _processedIds.remove(request.id);
-        });
-        HapticHelper.heavyImpact();
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('❌ Error: $e'), backgroundColor: Colors.red),
-          );
-        }
-      }
     }
+  }
   }
 }

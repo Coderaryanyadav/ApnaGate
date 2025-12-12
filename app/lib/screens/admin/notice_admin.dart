@@ -564,18 +564,13 @@ class NoticeAdminScreen extends ConsumerWidget {
 
                   if (context.mounted) {
                     Navigator.pop(context);
+                    // Force refresh list
+                    ref.invalidate(firestoreServiceProvider);
+                    
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Row(
-                          children: [
-                            Icon(Icons.check_circle, color: Colors.white),
-                            SizedBox(width: 8),
-                            Text('Notice posted successfully!'),
-                          ],
-                        ),
-                        backgroundColor: Colors.green,
+                      const SnackBar(
+                        content: Text('Notice posted successfully'),
                         behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                     );
                   }

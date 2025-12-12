@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:io';
+import 'package:uuid/uuid.dart';
 import '../../services/auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
@@ -134,89 +136,146 @@ class _HousehelpScreenState extends ConsumerState<HousehelpScreen> {
   Widget _buildStaffCard(Map<String, dynamic> staff) {
     final isPresent = staff['is_present'] == true;
     
-    return Card(
-      color: const Color(0xFF1E1E1E),
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: () => _showStaffQR(staff),
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              // Photo
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: Colors.grey.withValues(alpha: 0.2),
-                backgroundImage: staff['photo_url'] != null ? CachedNetworkImageProvider(staff['photo_url']) : null,
-                child: staff['photo_url'] == null 
-                  ? const Icon(Icons.person, color: Colors.white54) 
-                  : null,
-              ),
-              const SizedBox(width: 16),
-              
-              // Details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      staff['name'],
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E2C),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        boxShadow: [
+          BoxShadow(
+             color: Colors.black.withValues(alpha: 0.3),
+             blurRadius: 10,
+             offset: const Offset(0, 5),
+          )
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showStaffQR(staff),
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // 1. Photo Avatar
+                Hero(
+                  tag: 'staff_${staff['id']}',
+                  child: Container(
+                    width: 60, height: 60,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isPresent ? Colors.greenAccent : Colors.grey.withValues(alpha: 0.3), 
+                        width: 2
+                      ),
+                      image: staff['photo_url'] != null 
+                        ? DecorationImage(image: CachedNetworkImageProvider(staff['photo_url']), fit: BoxFit.cover)
+                        : null,
+                      color: const Color(0xFF2A2A35),
                     ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.white10,
-                        borderRadius: BorderRadius.circular(8),
+                     child: staff['photo_url'] == null 
+                        ? const Icon(Icons.person, color: Colors.white54, size: 30) 
+                        : null,
+                  ),
+                ),
+                
+                const SizedBox(width: 16),
+                
+                // 2. Name & Role
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        staff['name'] ?? 'Unknown',
+                        style: const TextStyle(
+                          color: Colors.white, 
+                          fontSize: 18, 
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      child: Text(
-                        staff['role'].toString().toUpperCase(),
-                        style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              (staff['role'] ?? 'Staff').toString().toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.indigoAccent, 
+                                fontSize: 10, 
+                                fontWeight: FontWeight.bold
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Status Badge
+                           Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: (isPresent ? Colors.green : Colors.red).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 6, height: 6,
+                                  decoration: BoxDecoration(
+                                    color: isPresent ? Colors.greenAccent : Colors.redAccent,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  isPresent ? 'INSIDE' : 'OUTSIDE',
+                                  style: TextStyle(
+                                    color: isPresent ? Colors.greenAccent : Colors.redAccent,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
+                    ],
+                  ),
+                ),
+
+                // 3. Action Buttons (History & Delete)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.history, color: Colors.blueAccent),
+                      tooltip: 'View History',
+                      onPressed: () => Navigator.push(
+                        context, 
+                        MaterialPageRoute(
+                          builder: (_) => StaffAttendanceScreen(staffId: staff['id'], staffName: staff['name'])
+                        )
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.white30),
+                      tooltip: 'Remove',
+                      onPressed: () => _confirmDelete(staff['id']),
                     ),
                   ],
                 ),
-              ),
-
-              // View History Icon
-              IconButton(
-                icon: const Icon(Icons.calendar_month, color: Colors.blueAccent),
-                onPressed: () => Navigator.push(
-                  context, 
-                  MaterialPageRoute(
-                    builder: (_) => StaffAttendanceScreen(staffId: staff['id'], staffName: staff['name'])
-                  )
-                ),
-              ),
-
-              // Status
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: (isPresent ? Colors.green : Colors.red).withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: (isPresent ? Colors.green : Colors.red).withValues(alpha: 0.5)),
-                ),
-                child: Text(
-                  isPresent ? 'INSIDE' : 'OUTSIDE',
-                  style: TextStyle(
-                    color: isPresent ? Colors.greenAccent : Colors.redAccent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              
-              const SizedBox(width: 12),
-              // Delete Button
-              IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.grey),
-                onPressed: () => _confirmDelete(staff['id']),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -230,37 +289,50 @@ class _HousehelpScreenState extends ConsumerState<HousehelpScreen> {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) => Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.fromLTRB(32, 24, 32, 48),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 24),
             const Text(
-              'Show to Guard',
+              'Show to Security Guard',
               style: TextStyle(color: Colors.white54, fontSize: 14),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(color: Colors.white.withValues(alpha: 0.1), blurRadius: 20),
+                ],
               ),
               child: QrImageView(
                 data: 'STAFF:${staff['id']}',
-                size: 200,
+                size: 220,
                 backgroundColor: Colors.white,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
             Text(
               staff['name'],
-              style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+              style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
             ),
-            Text(
-              staff['role'].toString().toUpperCase(),
-              style: const TextStyle(color: Colors.indigoAccent, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                 color: Colors.indigo.withValues(alpha: 0.2),
+                 borderRadius: BorderRadius.circular(20),
+                 border: Border.all(color: Colors.indigoAccent.withValues(alpha: 0.5)),
+              ),
+              child: Text(
+                staff['role'].toString().toUpperCase(),
+                style: const TextStyle(color: Colors.indigoAccent, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+              ),
             ),
-            const SizedBox(height: 32),
           ],
         ),
       ),
@@ -271,16 +343,19 @@ class _HousehelpScreenState extends ConsumerState<HousehelpScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove Staff?'),
-        content: const Text('Are you sure you want to remove this staff member?'),
+        backgroundColor: const Color(0xFF1E1E2C),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Remove Staff?', style: TextStyle(color: Colors.white)),
+        content: const Text('Are you sure you want to remove this staff member? This will delete their history.', style: TextStyle(color: Colors.white70)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
             onPressed: () {
                ref.read(firestoreServiceProvider).deleteHousehelp(id);
                Navigator.pop(context);
             }, 
-            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+            child: const Text('Removing...'), // Short text for button
           ),
         ],
       ),
@@ -295,10 +370,13 @@ class _HousehelpScreenState extends ConsumerState<HousehelpScreen> {
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
-            title: const Text('Add Househelp'),
+            backgroundColor: const Color(0xFF1E1E2C),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: const Text('Add Daily Help', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -306,56 +384,96 @@ class _HousehelpScreenState extends ConsumerState<HousehelpScreen> {
                   GestureDetector(
                     onTap: () async {
                       final ImagePicker picker = ImagePicker();
-                      final XFile? image = await picker.pickImage(source: ImageSource.camera, maxWidth: 600);
+                      final XFile? image = await picker.pickImage(source: ImageSource.camera, maxWidth: 600, imageQuality: 80);
                       if (image != null) {
                         setDialogState(() => photoPath = image.path);
                       }
                     },
-                    child: CircleAvatar(
-                      radius: 40,
-                      backgroundColor: Colors.grey.shade800,
-                      backgroundImage: photoPath != null ? NetworkImage('file://$photoPath') : null, // Note: NetworkImage might not work with file URI correctly directly in all Flutter versions without FileImage, but usually ok. Wait, NetworkImage('file://') fails.
-                      child: photoPath == null 
-                        ? const Icon(Icons.camera_alt, color: Colors.white) 
-                        : null,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.indigoAccent, width: 2),
+                      ),
+                      child: CircleAvatar(
+                        radius: 45,
+                        backgroundColor: const Color(0xFF2A2A35),
+                        backgroundImage: photoPath != null ? FileImage(File(photoPath!)) : null, 
+                        child: photoPath == null 
+                          ? const Icon(Icons.camera_alt, color: Colors.white54, size: 30) 
+                          : null,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  TextFormField(
+                    controller: nameCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Full Name',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      prefixIcon: const Icon(Icons.person, color: Colors.indigoAccent),
+                      filled: true,
+                      fillColor: Colors.black.withValues(alpha: 0.3),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  TextFormField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(labelText: 'Full Name', prefixIcon: Icon(Icons.person)),
-                  ),
-                  const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+                    dropdownColor: const Color(0xFF2A2A35),
+                    style: const TextStyle(color: Colors.white),
                     // ignore: deprecated_member_use
                     value: role,
                     items: ['Maid', 'Driver', 'Cook', 'Nanny', 'Other'].map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
                     onChanged: (v) => setDialogState(() => role = v!),
-                    decoration: const InputDecoration(labelText: 'Role', prefixIcon: Icon(Icons.work)),
+                    decoration: InputDecoration(
+                      labelText: 'Role',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      prefixIcon: const Icon(Icons.work, color: Colors.indigoAccent),
+                      filled: true,
+                      fillColor: Colors.black.withValues(alpha: 0.3),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   TextFormField(
                     controller: phoneCtrl,
-                    decoration: const InputDecoration(labelText: 'Phone (Optional)', prefixIcon: Icon(Icons.phone)),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Phone (Optional)',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      prefixIcon: const Icon(Icons.phone, color: Colors.indigoAccent),
+                      filled: true,
+                      fillColor: Colors.black.withValues(alpha: 0.3),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
                     keyboardType: TextInputType.phone,
                   ),
                 ],
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+              TextButton(
+                 onPressed: () => Navigator.pop(dialogContext), 
+                 child: const Text('Cancel', style: TextStyle(color: Colors.grey))
+              ),
               ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                   backgroundColor: Colors.indigoAccent, 
+                   foregroundColor: Colors.white,
+                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
                 onPressed: () async {
-                  if (nameCtrl.text.isEmpty) return;
+                  if (nameCtrl.text.trim().isEmpty) return;
                   
-                  // Quick Upload Logic (Ideally moved to service)
+                  // Show Loading visual (quick hack since state is local)
+                  setDialogState(() {}); 
+                  
                   String? photoUrl;
                   if (photoPath != null) {
-                     // We need to implement upload logic here or pass path
-                     // For simplicity, we assume StorageService exists
                       try {
                         photoUrl = await ref.read(storageServiceProvider).uploadProfilePhoto(
-                           userId: 'staff_${DateTime.now().millisecondsSinceEpoch}', // Temp ID
+                           userId: 'staff_${const Uuid().v4()}', 
                            imagePath: photoPath!,
                         );
                       } catch (e) {
@@ -365,15 +483,15 @@ class _HousehelpScreenState extends ConsumerState<HousehelpScreen> {
 
                   await ref.read(firestoreServiceProvider).addHousehelp(
                     ownerId: ownerId,
-                    name: nameCtrl.text,
+                    name: nameCtrl.text.trim(),
                     role: role,
-                    phone: phoneCtrl.text,
+                    phone: phoneCtrl.text.trim(),
                     photoUrl: photoUrl,
                   );
                   
                   if (mounted && dialogContext.mounted) Navigator.pop(dialogContext);
                 },
-                child: const Text('Add'),
+                child: const Text('Add Staff', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
           );

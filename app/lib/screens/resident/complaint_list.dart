@@ -195,8 +195,13 @@ class ComplaintListScreen extends ConsumerWidget {
 
     await showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
+      builder: (ctx) {
+        bool isSubmitting = false;
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+
+          return AlertDialog(
           title: const Text('Raise Complaint'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -244,46 +249,71 @@ class ComplaintListScreen extends ConsumerWidget {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () async {
+              onPressed: isSubmitting 
+                ? null 
+                : () async {
                 if (description.trim().isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Please provide a description')),
                   );
                   return;
                 }
-
-                final complaint = Complaint(
-                  id: '',
-                  residentId: user.id,
-                  flatNumber: '${appUser.wing}-${appUser.flatNumber}',
-                  title: selectedCategory,
-                  description: description,
-                  status: 'open',
-                  createdAt: DateTime.now(),
-                );
-
-                await ref.read(firestoreServiceProvider).addComplaint(complaint);
                 
-                // 🔔 Notify Admins
-                await ref.read(notificationServiceProvider).notifyByTag(
-                  tagKey: 'role',
-                  tagValue: 'admin',
-                  title: '⚠️ New Complaint: ${appUser.wing}-${appUser.flatNumber}',
-                  message: '$selectedCategory: $description',
-                  data: {'priority': 'high'},
-                );
-                if (context.mounted) {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Complaint submitted successfully')),
+                setState(() => isSubmitting = true);
+
+                try {
+                  final complaint = Complaint(
+                    id: '',
+                    residentId: user.id,
+                    flatNumber: '${appUser.wing}-${appUser.flatNumber}',
+                    title: selectedCategory,
+                    description: description,
+                    status: 'open',
+                    createdAt: DateTime.now(),
                   );
+
+                  await ref.read(firestoreServiceProvider).addComplaint(complaint);
+                  
+                  // 🔔 Notify Admins
+                  try {
+                    await ref.read(notificationServiceProvider).notifyByTag(
+                      tagKey: 'role',
+                      tagValue: 'admin',
+                      title: '⚠️ New Complaint: ${appUser.wing}-${appUser.flatNumber}',
+                      message: '$selectedCategory: $description',
+                      data: {'priority': 'high'},
+                    );
+                  } catch (e) {
+                    debugPrint('Notification failed: $e'); // Non-blocking
+                  }
+
+                  if (context.mounted) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Complaint submitted successfully')),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                     ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                    );
+                  }
+                } finally {
+                  if (context.mounted) {
+                    setState(() => isSubmitting = false);
+                  }
                 }
               },
-              child: const Text('Submit'),
+              child: isSubmitting 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) 
+                : const Text('Submit'),
             ),
           ],
-        ),
-      ),
+        );
+        },
+      );
+      },
     );
   }
 } // End class

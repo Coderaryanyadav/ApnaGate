@@ -41,13 +41,37 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
       });
     }
 
-    // 2. Global Auto-Refresh (10s)
+    // 2. Global Auto-Refresh (10s) - Only for UI
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       if (mounted) setState(() {}); 
     });
 
     // Init Local Notifications
     _initLocalNotifications(); 
+    
+    // 3. Realtime Watchman Alerts (Efficient)
+    _subscribeToWatchmanAlerts();
+  }
+
+  void _subscribeToWatchmanAlerts() {
+    final user = ref.read(authServiceProvider).currentUser;
+    if (user == null) return;
+
+    // Listen for NEW alerts inserted by Background Service
+    Supabase.instance.client
+      .from('watchman_alerts')
+      .stream(primaryKey: ['id'])
+      .listen((List<Map<String, dynamic>> alerts) {
+        // Client-side filtering because stream().eq() threw an error
+        final pending = alerts.where((a) => 
+          a['guard_id'] == user.id && a['status'] == 'pending'
+        ).toList();
+        
+        if (pending.isNotEmpty && mounted) {
+          // Show the latest pending alert
+          _showWatchmanDialog(pending.last['id']);
+        }
+      });
   }
 
   @override
@@ -121,18 +145,46 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
       stream: _sosStream,
       builder: (context, snapshot) {
         if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-           final newAlerts = snapshot.data!.where((a) => !_handledAlerts.contains(a['id'])).toList();
-           if (newAlerts.isNotEmpty && !_isAlertShowing) { // Only show if not handled
-             final alert = newAlerts.first;
-             _handledAlerts.add(alert['id']);
-             // 🚀 TRIGGER LOCAL NOTIFICATION (Backup)
-             _triggerLocalSOS(alert);
-             
-             WidgetsBinding.instance.addPostFrameCallback((_) {
-               if (mounted) _showSOSDialog(alert);
-             });
+           final allAlerts = snapshot.data!;
+           
+           // 🛡️ INITIAL LOAD SUPPRESSION
+           if (_handledAlerts.isEmpty) {
+               for (var alert in allAlerts) {
+                   _handledAlerts.add(alert['id']);
+               }
+           } else {
+               // Normal Realtime Flow: Only show NEW alerts we haven't seen
+               final newAlerts = allAlerts.where((a) => !_handledAlerts.contains(a['id'])).toList();
+               
+               if (newAlerts.isNotEmpty && !_isAlertShowing) {
+                   for (var alert in newAlerts) {
+                       // 🛑 FRESHNESS CHECK (3 Minutes)
+                       final createdAtStr = alert['created_at'];
+                       if (createdAtStr != null) {
+                           final created = DateTime.tryParse(createdAtStr)?.toUtc();
+                           final now = DateTime.now().toUtc();
+                           // If alert is older than 3 minutes, ignore it (stale)
+                           if (created != null && now.difference(created).inMinutes.abs() > 3) {
+                               _handledAlerts.add(alert['id']);
+                               continue; 
+                           }
+                       }
+
+                       _handledAlerts.add(alert['id']);
+                       
+                       // Sound Logic
+                       _triggerLocalSOS(alert);
+                       
+                       WidgetsBinding.instance.addPostFrameCallback((_) {
+                           if (mounted) _showSOSDialog(alert);
+                       });
+                       
+                       break; // Handle one at a time
+                   }
+               }
            }
         }
+
         
         return Scaffold(
           extendBodyBehindAppBar: true,
@@ -184,6 +236,10 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
                     () => Navigator.pushNamed(context, AppRoutes.serviceDirectory)),
                   _buildGlassCard(context, 'Daily Staff', Icons.badge, Colors.tealAccent, 
                     () => Navigator.pushNamed(context, AppRoutes.staffEntry)),
+                  _buildGlassCard(context, 'Patrol Mode', Icons.security, Colors.orange, 
+                    () => Navigator.pushNamed(context, AppRoutes.patrol)),
+                  _buildGlassCard(context, 'SOS ALERT', Icons.sos, Colors.red, 
+                    () => _confirmGuardSOS()),
                 ],
               ),
             ),
@@ -191,6 +247,57 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
         );
       },
     );
+  }
+
+  Future<void> _confirmGuardSOS() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF200000),
+        title: const Row(
+          children: [
+             Icon(Icons.warning, color: Colors.red, size: 30),
+             SizedBox(width: 10),
+             Text('TRIGGER SOS?', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Text('This will alert ALL Admins & Residents.\n\nUse only for EMERGENCIES (Fire, Attack, Medical).', 
+          style: TextStyle(color: Colors.white70, fontSize: 16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false), 
+            child: const Text('CANCEL', style: TextStyle(color: Colors.grey))
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true), 
+            child: const Text('TRIGGER ALERT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final user = ref.read(authServiceProvider).currentUser;
+      if (user == null) return;
+      
+      // Send SOS with "GUARD" as identifier so residents know
+      await ref.read(firestoreServiceProvider).sendSOS(
+        wing: 'GUARD POST', // Wing
+      );
+      
+      final name = user.userMetadata?['name'] ?? 'Guard';
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🚨 EMERGENCY ALERT SENT BY $name!'), 
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          )
+        );
+      }
+    }
   }
 
   void _showSOSDialog(Map<String, dynamic> alert) {
@@ -259,6 +366,87 @@ class _GuardHomeState extends ConsumerState<GuardHome> {
         ],
       ),
     ).then((_) => setState(() => _isAlertShowing = false));
+  }
+
+
+
+  void _showWatchmanDialog(String alertId) {
+    if (_isAlertShowing) return;
+    _isAlertShowing = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => PopScope(
+        canPop: false,
+        child: Dialog(
+          backgroundColor: Colors.red[900],
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.access_alarm, size: 64, color: Colors.white),
+                const SizedBox(height: 16),
+                const Text(
+                  'NIGHT CHECK',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Are you awake and on duty?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 18),
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.red[900],
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () async {
+                      final dialogContext = context; // Capture context before async
+                      try {
+                        await Supabase.instance.client
+                            .from('watchman_alerts')
+                            .update({
+                              'status': 'acknowledged',
+                              'responded_at': DateTime.now().toUtc().toIso8601String(),
+                            })
+                            .eq('id', alertId);
+                        
+                        if (mounted && dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
+                        _isAlertShowing = false;
+                      } catch (e) {
+                         debugPrint('Error acknowledging alert: $e');
+                      }
+                    },
+                    child: const Text(
+                      "YES, I'M AWAKE",
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildGlassCard(BuildContext context, String title, IconData icon, Color color, VoidCallback onTap) {

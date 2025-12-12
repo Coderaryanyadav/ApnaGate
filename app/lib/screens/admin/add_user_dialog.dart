@@ -128,8 +128,10 @@ class _AddUserDialogState extends ConsumerState<AddUserDialog> {
       final firestoreService = ref.read(firestoreServiceProvider);
 
       // Create auth user (Admin-safe: Uses secondary app)
-      // Create auth user (Admin-safe: Uses secondary app)
-      final newUserId = await authService.createUser(_emailController.text, _passwordController.text);
+      final newUserId = await authService.createUser(
+        _emailController.text, 
+        _passwordController.text,
+      );
       if (newUserId == null) throw Exception('Failed to create user');
 
       List<String>? members;
@@ -137,7 +139,7 @@ class _AddUserDialogState extends ConsumerState<AddUserDialog> {
         members = _membersController.text.split(',').map((e) => e.trim()).take(6).toList();
       }
 
-      await firestoreService.createUser(AppUser(
+      await firestoreService.updateUser(AppUser(
         id: newUserId,
         email: _emailController.text, // Pass email
         name: _nameController.text,

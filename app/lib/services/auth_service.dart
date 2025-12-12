@@ -31,35 +31,25 @@ class AuthService {
       final response = await _auth.signInWithPassword(email: email, password: password);
       
       if (response.user != null) {
-        // ✅ 1. Check for Household Invitation (Auto-Link)
-        await _checkAndLinkInvitation(response.user!);
+        // ✅ 1. Check for Household Invitation (Auto-Link) - non-blocking
+        try {
+          await _checkAndLinkInvitation(response.user!);
+        } catch (e) {
+          debugPrint('⚠️ Invitation check failed (non-critical): $e');
+        }
 
-        // ✅ 2. Set OneSignal External ID and save Player ID to database
-        await OneSignal.User.addAlias('external_id', response.user!.id);
-        await OneSignal.login(response.user!.id);
-        
-        // Get the OneSignal Player ID (subscription ID)
-        final playerId = OneSignal.User.pushSubscription.id;
-        debugPrint('✅ OneSignal Player ID: $playerId');
-        
-        // Save Player ID to database for direct notification targeting
-        if (playerId != null) {
-          try {
-            final client = Supabase.instance.client;
-            await client
-                .from('profiles')
-                .update({'onesignal_player_id': playerId})
-                .eq('id', response.user!.id);
-            debugPrint('✅ OneSignal Player ID saved to database');
-          } catch (e) {
-            debugPrint('❌ Error saving Player ID: $e');
-          }
+        // ✅ 2. Set OneSignal - non-blocking
+        try {
+          await OneSignal.User.addAlias('external_id', response.user!.id);
+          await OneSignal.login(response.user!.id);
+          
+          final playerId = OneSignal.User.pushSubscription.id;
+          debugPrint('✅ OneSignal Player ID: $playerId');
+        } catch (e) {
+          debugPrint('⚠️ OneSignal setup failed (non-critical): $e');
         }
         
-        debugPrint('✅ OneSignal external ID and login set for: ${response.user!.id}');
-
-        
-        // ✅ 3. Fetch user profile from database to set OneSignal tags
+        // ✅ 3. Fetch user profile and set tags - non-blocking
         try {
           final client = Supabase.instance.client;
           final profileData = await client
@@ -69,27 +59,24 @@ class AuthService {
               .maybeSingle();
           
           if (profileData != null) {
-            // Set OneSignal tags for notification filtering
             if (profileData['role'] != null) {
               await OneSignal.User.addTagWithKey('role', profileData['role'].toString().toLowerCase());
             }
             if (profileData['wing'] != null) {
               await OneSignal.User.addTagWithKey('wing', profileData['wing'].toString().toUpperCase());
-              debugPrint('✅ OneSignal tag set: wing = ${profileData['wing']}');
             }
             if (profileData['flat_number'] != null) {
               await OneSignal.User.addTagWithKey('flat_number', profileData['flat_number'].toString().toUpperCase());
-              debugPrint('✅ OneSignal tag set: flat_number = ${profileData['flat_number']}');
             }
             if (profileData['user_type'] != null) {
               await OneSignal.User.addTagWithKey('user_type', profileData['user_type'].toString().toLowerCase());
             }
+            debugPrint('✅ Profile tags set successfully');
           } else {
-            debugPrint('⚠️ No profile found for user ${response.user!.id}');
+            debugPrint('⚠️ No profile found - continuing anyway');
           }
         } catch (e) {
-          debugPrint('❌ Error setting OneSignal tags: $e');
-          // Don't fail login if tag setting fails
+          debugPrint('⚠️ Profile fetch failed (non-critical): $e');
         }
       }
       

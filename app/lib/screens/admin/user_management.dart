@@ -117,7 +117,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                         ),
                         foregroundColor: WidgetStateProperty.resolveWith<Color>(
                           (Set<WidgetState> states) {
-                            if (states.contains(WidgetState.selected)) return Colors.white;
+                            if (states.contains(WidgetState.selected)) return Colors.black;
                             return Colors.grey;
                           },
                         ),
@@ -367,7 +367,10 @@ class _EditUserDialogState extends ConsumerState<_EditUserDialog> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         // ignore: deprecated_member_use
-                        value: _selectedFlat != null && _selectedFlat!.length == 4 ? _selectedFlat : null,
+                        value: (() {
+                          final flatItems = _generateFlatNumbers();
+                          return flatItems.any((item) => item.value == _selectedFlat) ? _selectedFlat : null;
+                        })(),
                         decoration: const InputDecoration(labelText: 'Flat'),
                         items: _generateFlatNumbers(),
                         onChanged: (v) => setState(() => _selectedFlat = v),
@@ -448,23 +451,8 @@ class _EditUserDialogState extends ConsumerState<_EditUserDialog> {
     
     for (int floor = 1; floor <= config.totalFloors; floor++) {
       for (int flat = 1; flat <= config.flatsPerFloor; flat++) {
-        // Pad flat number: 1 -> 01, but floor can be 1 or 12.
-        // Format: {Floor}{Flat} e.g. 101, 102... 1101, 1102
-        // Typical convention: Floor padded? usually not if < 10?
-        // Let's assume typical: 101, 102... 1201, 1202.
-        // Wait, existing code was: floor.toString().padLeft(2, '0') + '0' + flat (max 4 flats??)
-        // Original: 0101, 0102...
-        // Let's stick to standard: Floor + PadLeft(2, flat)
-        // Actually, let's use the USER's previous logic but limit by dynamic counts.
-        // Previous logic: floor 1-12, flat 1-4.
-        // flatNum = '${floor.toString().padLeft(2, '0')}0$flat';  --> "0101"
-        // If flats > 9, "0110"?
-        
-        // Better logic:
+        // Safe logic: Floor + 01..Flats (e.g., 101, 102... 1201)
         final String flatNum = '${floor.toString()}${flat.toString().padLeft(2, '0')}'; 
-        // 101, 102, 1204.
-        // But user might expect 3 digits for ground floor? 
-        // Let's assume standard format: Floor + 01..Flats
         items.add(DropdownMenuItem(value: flatNum, child: Text(flatNum)));
       }
     }

@@ -105,14 +105,28 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
         if (snapshot.hasData && snapshot.data!.isNotEmpty) {
            final newAlerts = snapshot.data!.where((a) => !_handledAlerts.contains(a['id'])).toList();
            
-           if (newAlerts.isNotEmpty && !_isAlertShowing) {
-             final alert = newAlerts.first;
-             _handledAlerts.add(alert['id']);
-             
-             // Schedule dialog to avoid build conflicts
-             WidgetsBinding.instance.addPostFrameCallback((_) {
-               _showSOSDialog(alert);
-             });
+            if (newAlerts.isNotEmpty && !_isAlertShowing) {
+               for (var alert in newAlerts) {
+                   // 🛑 FRESHNESS CHECK (3 Minutes) - Admin Side
+                   final createdAtStr = alert['created_at'];
+                   if (createdAtStr != null) {
+                       final created = DateTime.tryParse(createdAtStr)?.toUtc();
+                       final now = DateTime.now().toUtc();
+                       if (created != null && now.difference(created).inMinutes.abs() > 3) {
+                          _handledAlerts.add(alert['id']);
+                          continue; // Skip stale alert
+                       }
+                   }
+
+                   _handledAlerts.add(alert['id']);
+                   
+                   // Schedule dialog to avoid build conflicts
+                   WidgetsBinding.instance.addPostFrameCallback((_) {
+                     if (mounted) _showSOSDialog(alert);
+                   });
+                   
+                   break; // Show one at a time
+               }
            }
         }
 
@@ -129,15 +143,25 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                 expandedHeight: 160.0,
                 floating: false,
                 pinned: true,
-                backgroundColor: Colors.transparent,
+                backgroundColor: const Color(0xFF1a1a2e), // Make opaque to prevent content showing through
                 flexibleSpace: FlexibleSpaceBar(
-                  title: const Text(
-                    'Admin Dashboard',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      fontSize: 24,
-                      letterSpacing: 0.5,
+                  collapseMode: CollapseMode.pin, // Keep gradient visible
+                  titlePadding: const EdgeInsetsDirectional.only(start: 16, bottom: 16),
+                  centerTitle: false,
+                  title: const Padding(
+                    padding: EdgeInsets.only(right: 60.0), // Avoid overlap with actions
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Admin Dashboard',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          fontSize: 20, // Slightly smaller base size
+                          letterSpacing: 0.5,
+                        ),
+                      ),
                     ),
                   ),
                   background: Container(
@@ -238,16 +262,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Overview',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
+                          // Overview removed
                           GridView.count(
                             crossAxisCount: 2,
                             shrinkWrap: true,
@@ -286,6 +301,31 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                                   return _ModernStatCard(
                                     title: 'Wings',
                                     value: config.wings.join(', '),
+                                    // Custom child for Wings to handle layout
+                                    customChild: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          config.wings.join(', '),
+                                          style: const TextStyle(
+                                            fontSize: 28,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                            height: 1.0,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Wings',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.white.withValues(alpha: 0.8),
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                     icon: Icons.apartment_outlined,
                                     gradient: const LinearGradient(
                                       colors: [Color(0xFF43e97b), Color(0xFF38f9d7)],
@@ -385,6 +425,20 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                         ],
                       ),
                     ],
+                  ),
+                ),
+              ),
+              
+              // 5. Security & Patrol
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: _ActionTile(
+                    title: 'Patrol Logs',
+                    subtitle: 'View Guard Patrol History & Scans',
+                    icon: Icons.security,
+                    colors: const [Color(0xFFff9966), Color(0xFFff5e62)],
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.patrolLogs),
                   ),
                 ),
               ),
@@ -658,12 +712,14 @@ class _ModernStatCard extends StatelessWidget {
   final String value;
   final IconData icon;
   final Gradient gradient;
+  final Widget? customChild;
 
   const _ModernStatCard({
     required this.title,
     required this.value,
     required this.icon,
     required this.gradient,
+    this.customChild,
   });
 
   @override
@@ -702,13 +758,13 @@ class _ModernStatCard extends StatelessWidget {
                   ),
                   child: Icon(icon, color: Colors.white, size: 20),
                 ),
-                Column(
+                customChild ?? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       value,
                       style: const TextStyle(
-                        fontSize: 22,
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
@@ -716,9 +772,9 @@ class _ModernStatCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Colors.white70,
+                        color: Colors.white.withValues(alpha: 0.8),
                         fontWeight: FontWeight.w500,
                       ),
                     ),

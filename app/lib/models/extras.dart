@@ -175,7 +175,7 @@ class ServiceProvider {
       'name': name,
       'category': category,
       'phone': phone,
-      'is_verified': isVerified,
+      // 'is_verified' removed - column doesn't exist in service_providers table
       'status': status,
       'last_active': lastActive?.toIso8601String(),
     };

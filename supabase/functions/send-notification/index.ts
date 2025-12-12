@@ -31,7 +31,7 @@ serve(async (req) => {
         }
 
         // Parse request body
-        const { type, userId, tagKey, tagValue, wing, flatNumber, title, message, data, android_channel_id } = await req.json()
+        const { type, userId, tagKey, tagValue, wing, flatNumber, title, message, data, android_channel_id, ttl, collapse_id } = await req.json()
 
         // Build OneSignal notification payload
         let payload: any = {
@@ -40,10 +40,18 @@ serve(async (req) => {
             contents: { en: message },
             android_channel_id: android_channel_id || 'apna_gate_alarm_v1',
             priority: 10,
-            ttl: 3600,
+            ttl: ttl || 3600,
             content_available: true,
             mutable_content: true,
             data: data || {},
+            collapse_id: collapse_id,
+        }
+
+        // 🔔 SPECIAL HANDLING: Visitor Arrival should produce sound on iOS too
+        // Android is handled by channel 'apna_gate_alarm_v1'
+        if (data && data.type === 'visitor_arrival') {
+            payload.ios_sound = 'notification.wav';
+            payload.priority = 10;
         }
 
         // Add targeting based on type
@@ -66,13 +74,46 @@ serve(async (req) => {
             ]
         } else if (type === 'sos') {
             // SOS: Notify ALL guards and admins
-            payload.android_channel_id = 'apna_gate_alarm_v3'; // High Priority Channel
-            payload.filters = [
-                { field: 'tag', key: 'role', relation: '=', value: 'guard' },
-                { operator: 'OR' },
-                { field: 'tag', key: 'role', relation: '=', value: 'admin' }
-            ]
+            // 🚀 ROBUST: Fetch IDs from DB instead of relying on Tags (which might be missing on device)
+            console.log('🚨 SOS Triggered: Fetching Admin/Guard IDs...')
+
+            const supabaseUrl = Deno.env.get('SUPABASE_URL')
+            const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+            if (supabaseUrl && supabaseServiceKey) {
+                const supabase = createClient(supabaseUrl, supabaseServiceKey)
+                const { data: users, error } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .or('role.eq.guard,role.eq.admin')
+
+                if (users && users.length > 0) {
+                    const targetIds = users.map(u => u.id)
+                    console.log(`🎯 Targeting ${targetIds.length} users (Guards/Admins)`)
+
+                    payload.include_external_user_ids = targetIds
+                    payload.channel_for_external_user_ids = 'push'
+                } else {
+                    console.error('❌ No guards or admins found in DB!')
+                    // Fallback to tags if DB fetch fails or is empty (unlikely)
+                    payload.filters = [
+                        { field: 'tag', key: 'role', relation: '=', value: 'guard' },
+                        { operator: 'OR' },
+                        { field: 'tag', key: 'role', relation: '=', value: 'admin' }
+                    ]
+                }
+            } else {
+                console.error('❌ Missing Supabase Env Vars for SOS!')
+                // Fallback
+                payload.filters = [
+                    { field: 'tag', key: 'role', relation: '=', value: 'guard' },
+                    { operator: 'OR' },
+                    { field: 'tag', key: 'role', relation: '=', value: 'admin' }
+                ]
+            }
+
             // High priority SOS settings
+            payload.android_channel_id = 'apna_gate_alarm_v3'; // High Priority Channel (Sound: notification)
             payload.priority = 10
             payload.ios_sound = 'notification.wav'
             payload.android_sound = 'notification'

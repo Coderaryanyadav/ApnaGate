@@ -187,7 +187,7 @@ class _NotificationEnforcerState extends State<_NotificationEnforcer> with Widge
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
                   onPressed: () async {
                     // 1. Try Requesting
-                    bool accepted = await OneSignal.Notifications.requestPermission(true);
+                    final bool accepted = await OneSignal.Notifications.requestPermission(true);
                     
                     // 2. If accepted, update immediately
                     if (accepted && mounted) {
