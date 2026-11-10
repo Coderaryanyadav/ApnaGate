@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ApnaGate TV Checkpoint</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body {
+            background-color: #000000;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #clock {
+            font-size: 8vh;
+            font-weight: bold;
+            color: #00ffcc;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+        }
+
+        #qr-container {
+            padding: 30px;
+            background: #ffffff;
+            border-radius: 20px;
+            box-shadow: 0 0 50px rgba(255, 255, 255, 0.1);
+        }
+
+        #status {
+            margin-top: 30px;
+            font-size: 3vh;
+            color: #888;
+            letter-spacing: 2px;
+        }
+
+        .location-tag {
+            position: absolute;
+            top: 20px;
+            left: 30px;
+            font-size: 4vh;
+            font-weight: bold;
+            color: #ff3366;
+            text-transform: uppercase;
+        }
+
+        /* Burn-in protection: slight movement */
+        @keyframes subtle-move {
+            0% {
+                transform: translate(0, 0);
+            }
+
+            25% {
+                transform: translate(5px, 5px);
+            }
+
+            50% {
+                transform: translate(-5px, 2px);
+            }
+
+            75% {
+                transform: translate(2px, -5px);
+            }
+
+            100% {
+                transform: translate(0, 0);
+            }
+        }
+
+        #main-content {
+            text-align: center;
+            animation: subtle-move 60s infinite alternate;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="location-tag">📍 LOBBY MASTER CHECKPOINT</div>
+
+    <div id="main-content">
+        <div id="clock">00:00:00</div>
+
+        <div id="qr-container">
+            <div id="qrcode"></div>
+        </div>
+
+        <div id="status">SCAN TO VERIFY PRESENCE</div>
+    </div>
+
+    <script>
+        const qrContainer = document.getElementById("qrcode");
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById("clock").innerText = now.toLocaleTimeString('en-US', { hour12: false });
+        }
+
+        function generateQR() {
+            qrContainer.innerHTML = ""; // Clear old QR
+
+            const now = new Date();
+            // Payload Format: {"type":"checkpoint", "location":"TV Checkpoint", "ts": 1234567890}
+            // This ensures every scan is unique and time-stamped.
+            const payload = JSON.stringify({
+                type: "checkpoint",
+                location: "TV Checkpoint - " + now.toLocaleTimeString(),
+                ts: now.getTime()
+            });
+
+            new QRCode(qrContainer, {
+                text: payload,
+                width: 400,
+                height: 400,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+
+        // Update Clock every second
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Regenerate QR every 30 seconds to prevent "photo-stealing"
+        generateQR();
+        setInterval(generateQR, 30000);
+
+    </script>
+</body>
+
+</html>

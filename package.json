@@ -1,0 +1,12 @@
+{
+    "name": "apnagate-data-populator",
+    "version": "1.0.0",
+    "description": "Automated Firebase data population for ApnaGate",
+    "main": "populate_users.js",
+    "scripts": {
+        "populate": "node populate_users.js"
+    },
+    "dependencies": {
+        "firebase-admin": "^12.0.0"
+    }
+}
