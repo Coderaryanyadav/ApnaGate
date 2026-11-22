@@ -1,12 +1,21 @@
 {
-    "name": "apnagate-data-populator",
-    "version": "1.0.0",
-    "description": "Automated Firebase data population for ApnaGate",
-    "main": "populate_users.js",
-    "scripts": {
-        "populate": "node populate_users.js"
-    },
-    "dependencies": {
-        "firebase-admin": "^12.0.0"
-    }
+  "name": "apnagate",
+  "version": "1.1.0",
+  "description": "ApnaGate - Smart Society Gatekeeper & Visitor Security Management System",
+  "scripts": {
+    "analyze": "cd app && flutter analyze",
+    "test": "cd app && flutter test",
+    "clean": "cd app && flutter clean",
+    "build:apk": "cd app && bash scripts/build_optimized.sh"
+  },
+  "keywords": [
+    "flutter",
+    "supabase",
+    "onesignal",
+    "visitor-management",
+    "smart-society",
+    "gatekeeper"
+  ],
+  "author": "Aryan Yadav",
+  "license": "MIT"
 }

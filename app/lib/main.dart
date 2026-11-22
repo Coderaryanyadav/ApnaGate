@@ -33,7 +33,7 @@ void main() async {
     // ONLY critical initialization - everything else lazy loaded
     await Supabase.initialize(
       url: SupabaseConfig.url,
-      anonKey: SupabaseConfig.anonKey,
+      publishableKey: SupabaseConfig.supabaseAnonKey,
     );
 
     // 🛡️ Wrap app with ErrorBoundary to catch all errors
@@ -60,7 +60,7 @@ void main() async {
 Future<void> _initOneSignalBackground() async {
   try {
      // await OneSignal.Debug.setLogLevel(OSLogLevel.verbose); // Disabled for production
-    OneSignal.initialize(SupabaseConfig.oneSignalAppId);
+    unawaited(OneSignal.initialize(SupabaseConfig.oneSignalAppId));
     
     // Wait for OneSignal to be ready
     await Future.delayed(const Duration(milliseconds: 1000));

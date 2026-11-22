@@ -21,7 +21,6 @@ linter:
     - unnecessary_await_in_return
 
     # Style & Consistency
-    - always_require_non_null_named_parameters
     - annotate_overrides
     - avoid_init_to_null
     - avoid_return_types_on_setters
@@ -34,7 +33,6 @@ linter:
     - library_prefixes
     - no_leading_underscores_for_local_identifiers
     - prefer_contains
-    - prefer_equal_for_default_values
     - prefer_final_fields
     - prefer_final_locals
     - prefer_is_empty
@@ -64,6 +62,10 @@ analyzer:
   exclude:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
+    - build/**
+    - android/**
+    - ios/**
+    - macos/**
   errors:
     invalid_annotation_target: ignore
     avoid_print: error  # STRICT: Print is an error now
