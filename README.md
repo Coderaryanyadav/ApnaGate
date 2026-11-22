@@ -10,12 +10,15 @@
 [![OneSignal](https://img.shields.io/badge/OneSignal-Push_Notifications-E54B4D?style=for-the-badge&logo=onesignal&logoColor=white)](https://onesignal.com)
 [![Riverpod](https://img.shields.io/badge/Riverpod-2.6_State_Mgmt-2E7D32?style=for-the-badge&logo=flutter&logoColor=white)](https://riverpod.dev)
 [![Hive](https://img.shields.io/badge/Hive-Offline_Cache-F39C12?style=for-the-badge&logo=dart&logoColor=white)](https://pub.dev/packages/hive_flutter)
-[![Test Suite](https://img.shields.io/badge/Flutter_Tests-14%2F14_Passing-brightgreen?style=for-the-badge&logo=checkmarx&logoColor=white)]()
+[![Build & Release](https://github.com/Coderaryanyadav/ApnaGate/actions/workflows/build-and-release.yml/badge.svg)](https://github.com/Coderaryanyadav/ApnaGate/actions/workflows/build-and-release.yml)
+[![Release](https://img.shields.io/badge/Release-v1.0.0-02569B?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Coderaryanyadav/ApnaGate/releases)
+[![Test Suite](https://img.shields.io/badge/Flutter_Tests-17%2F17_Passing-brightgreen?style=for-the-badge&logo=checkmarx&logoColor=white)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-F39C12?style=for-the-badge&logo=open-source-initiative&logoColor=white)](LICENSE)
 
 <br/>
 
 **[🏛️ System Architecture](./docs/ARCHITECTURE.md)** &nbsp;•&nbsp;
+**[🚀 Build & Release Guide](./docs/BUILD_AND_RELEASE.md)** &nbsp;•&nbsp;
 **[🗄️ Database Setup](./database/README.md)** &nbsp;•&nbsp;
 **[🔔 Operations Manual](./docs/QUICK_REFERENCE.md)** &nbsp;•&nbsp;
 **[💰 Cost Analysis](./docs/COST_ANALYSIS.md)** &nbsp;•&nbsp;

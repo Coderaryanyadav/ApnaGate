@@ -1,0 +1,303 @@
+name: Build & Release ApnaGate (APK & IPA)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      create_release:
+        description: 'Publish GitHub Release with assets'
+        type: boolean
+        required: true
+        default: true
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-and-test:
+    name: 🧪 Analyze & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Flutter Installation
+        run: flutter doctor -v
+
+      - name: Install Dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Static Code Analysis
+        working-directory: app
+        run: flutter analyze
+
+      - name: Execute Automated Unit & Widget Tests
+        working-directory: app
+        run: flutter test --coverage
+
+  build-android:
+    name: 🤖 Build Android (APK & AAB)
+    needs: validate-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Determine Version
+        id: versioning
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.release_version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v1.0.0-ci"
+          fi
+          # Strip leading 'v' if present for semver inside builds
+          SEMVER="${TAG#v}"
+          echo "TAG=${TAG}" >> $GITHUB_OUTPUT
+          echo "SEMVER=${SEMVER}" >> $GITHUB_OUTPUT
+          echo "Building version: ${TAG} (semver: ${SEMVER})"
+
+      - name: Install Dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Ensure gradlew is executable
+        run: chmod +x app/android/gradlew
+
+      - name: Build Android Release APK
+        working-directory: app
+        run: flutter build apk --release --build-name=${{ steps.versioning.outputs.SEMVER }}
+
+      - name: Build Android App Bundle (AAB)
+        working-directory: app
+        run: flutter build appbundle --release --build-name=${{ steps.versioning.outputs.SEMVER }}
+
+      - name: Stage Android Artifacts
+        run: |
+          mkdir -p dist-android
+          TAG="${{ steps.versioning.outputs.TAG }}"
+          cp app/build/app/outputs/flutter-apk/app-release.apk "dist-android/ApnaGate-${TAG}.apk"
+          cp app/build/app/outputs/bundle/release/app-release.aab "dist-android/ApnaGate-${TAG}.aab"
+          cd dist-android
+          sha256sum "ApnaGate-${TAG}.apk" "ApnaGate-${TAG}.aab" > SHA256SUMS-android.txt
+          cat SHA256SUMS-android.txt
+
+      - name: Upload Android Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-assets
+          path: dist-android/
+          retention-days: 14
+
+  build-ios:
+    name: 🍎 Build iOS (IPA)
+    needs: validate-and-test
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Determine Version
+        id: versioning
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.release_version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v1.0.0-ci"
+          fi
+          SEMVER="${TAG#v}"
+          echo "TAG=${TAG}" >> $GITHUB_OUTPUT
+          echo "SEMVER=${SEMVER}" >> $GITHUB_OUTPUT
+          echo "Building version: ${TAG} (semver: ${SEMVER})"
+
+      - name: Install Dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Install CocoaPods
+        working-directory: app/ios
+        run: pod install
+
+      - name: Build Unsigned iOS App
+        working-directory: app
+        run: flutter build ios --release --no-codesign --build-name=${{ steps.versioning.outputs.SEMVER }}
+
+      - name: Package Payload into Sideloadable IPA
+        run: |
+          mkdir -p dist-ios/Payload
+          TAG="${{ steps.versioning.outputs.TAG }}"
+          cp -r app/build/ios/iphoneos/Runner.app dist-ios/Payload/
+          cd dist-ios
+          zip -r -9 "ApnaGate-${TAG}.ipa" Payload
+          rm -rf Payload
+          shasum -a 256 "ApnaGate-${TAG}.ipa" > SHA256SUMS-ios.txt
+          cat SHA256SUMS-ios.txt
+
+      - name: Upload iOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-release-assets
+          path: dist-ios/
+          retention-days: 14
+
+  publish-release:
+    name: 🚀 Publish GitHub Release
+    needs: [build-android, build-ios]
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.create_release == true)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Determine Version
+        id: versioning
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.release_version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v1.0.0"
+          fi
+          echo "TAG=${TAG}" >> $GITHUB_OUTPUT
+
+      - name: Download Android Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-release-assets
+          path: release-assets/
+
+      - name: Download iOS Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-release-assets
+          path: release-assets/
+
+      - name: Consolidate SHA-256 Checksums
+        working-directory: release-assets
+        run: |
+          cat SHA256SUMS-android.txt SHA256SUMS-ios.txt > SHA256SUMS.txt
+          rm -f SHA256SUMS-android.txt SHA256SUMS-ios.txt
+          cat SHA256SUMS.txt
+
+      - name: Generate Release Notes
+        id: notes
+        run: |
+          TAG="${{ steps.versioning.outputs.TAG }}"
+          cat << 'EOF' > release_notes.md
+          ## 🚪 ApnaGate Release ${{ steps.versioning.outputs.TAG }}
+
+          Welcome to the official production release of **ApnaGate** — High-Throughput Digital Gatekeeper & Society ERP Platform.
+
+          ### 📦 Distributed Binaries & Installers
+
+          | File | Platform | Description |
+          |---|---|---|
+          | `ApnaGate-${{ steps.versioning.outputs.TAG }}.apk` | Android 5.0+ | Universal APK for direct device installation & sideloading |
+          | `ApnaGate-${{ steps.versioning.outputs.TAG }}.aab` | Android (Google Play) | Production App Bundle with dynamic ABI delivery |
+          | `ApnaGate-${{ steps.versioning.outputs.TAG }}.ipa` | iOS 15.5+ | Sideloadable Application Archive (AltStore, Sideloadly, TrollStore) |
+          | `SHA256SUMS.txt` | All | Cryptographic checksums for binary integrity validation |
+
+          ---
+
+          ### 🌟 What's Included in This Release
+
+          - **Realtime Checkpoint Ingress & Egress**: Guard checkpoint terminal with sub-second visitor entry/exit approvals.
+          - **Dynamic QR Code Scanner**: Hardware camera scanner with instant `guest_passes` validation.
+          - **Multi-Role Experience Engine**: Distinct workflows for Residents, Guards, and Society Administrators.
+          - **Multi-Channel Emergency SOS**: High-decibel alarm dispatch with priority push broadcast.
+          - **Dual-Channel Offline Resilience**: Hive local storage caching with automatic background replay on network reconnection.
+          - **Society ERP Modules**: Daily help tracking, staff attendance, community notices, and complaint ticketing.
+
+          ---
+
+          ### 📲 Installation & Sideloading Instructions
+
+          #### 🤖 Android (APK):
+          1. Download `ApnaGate-${{ steps.versioning.outputs.TAG }}.apk` to your Android device.
+          2. Tap the file in your browser downloads or Files manager.
+          3. Allow installation from unknown sources if prompted.
+          4. Alternatively via ADB:
+             ```bash
+             adb install ApnaGate-${{ steps.versioning.outputs.TAG }}.apk
+             ```
+
+          #### 🍎 iOS (IPA):
+          Because iOS requires app signing for non-App Store binaries, use any of the following standard sideloading utilities:
+          - **AltStore / SideStore**: Open AltStore on your iOS device, select `+`, and choose `ApnaGate-${{ steps.versioning.outputs.TAG }}.ipa`.
+          - **Sideloadly**: Connect your iPhone to Mac/PC via USB, drag the `.ipa` into Sideloadly, enter your Apple ID, and click **Start**.
+          - **TrollStore**: On supported iOS versions, import directly into TrollStore for permanent, revokeless installation.
+          - **Xcode Developer Deploy**:
+            ```bash
+            xcrun devicectl device install app --device <device-id> ApnaGate-${{ steps.versioning.outputs.TAG }}.ipa
+            ```
+
+          ---
+
+          ### 🔐 Cryptographic Checksums (SHA-256)
+          Verify binary integrity using:
+          ```bash
+          sha256sum -c SHA256SUMS.txt
+          ```
+          EOF
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.versioning.outputs.TAG }}
+          name: ApnaGate ${{ steps.versioning.outputs.TAG }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -57,9 +57,10 @@ app.*.map.json
 *.env.local
 .env
 
-# APK
+# APK & IPA
 *.apk
 *.aab
+*.ipa
 
 # Generated files
 **/generated_plugin_registrant.dart
