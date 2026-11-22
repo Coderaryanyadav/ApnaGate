@@ -37,7 +37,7 @@ The cloud automation workflow is configured at [`.github/workflows/build-and-rel
 flowchart TD
     A["Event: Tag Push (v*) or Workflow Dispatch"] --> B["Stage 1: 🧪 Analyze & Test<br/>(ubuntu-latest)"]
     B --> C1["Stage 2a: 🤖 Build Android<br/>(ubuntu-latest)"]
-    B --> C2["Stage 2b: 🍎 Build iOS<br/>(macos-14 Apple Silicon)"]
+    B --> C2["Stage 2b: 🍎 Build iOS<br/>(macos-latest Apple Silicon)"]
     
     C1 --> D1["Artifact: ApnaGate-v1.0.0.apk<br/>Artifact: ApnaGate-v1.0.0.aab"]
     C2 --> D2["Artifact: ApnaGate-v1.0.0.ipa<br/>(Packaged Payload)"]
@@ -61,7 +61,7 @@ flowchart TD
    - Uploads assets to workflow artifacts.
 
 3. **🍎 Build iOS**:
-   - Environment: `macos-14` (Apple Silicon runner with modern Xcode and CocoaPods).
+   - Environment: `macos-latest` (Apple Silicon runner with modern Xcode and CocoaPods).
    - Resolves CocoaPods dependencies (`pod install`).
    - Builds unsigned release binary (`flutter build ios --release --no-codesign`).
    - Packages `Runner.app` into distribution directory `Payload/` and zips into `ApnaGate-v<version>.ipa`.

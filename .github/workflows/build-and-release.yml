@@ -133,7 +133,7 @@ jobs:
   build-ios:
     name: 🍎 Build iOS (IPA)
     needs: validate-and-test
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
