@@ -107,11 +107,11 @@ jobs:
 
       - name: Build Android Release APK
         working-directory: app
-        run: flutter build apk --release --build-name=${{ steps.versioning.outputs.SEMVER }}
+        run: flutter build apk --release --build-name=${{ steps.versioning.outputs.SEMVER }} --android-skip-build-dependency-validation
 
       - name: Build Android App Bundle (AAB)
         working-directory: app
-        run: flutter build appbundle --release --build-name=${{ steps.versioning.outputs.SEMVER }}
+        run: flutter build appbundle --release --build-name=${{ steps.versioning.outputs.SEMVER }} --android-skip-build-dependency-validation
 
       - name: Stage Android Artifacts
         run: |
@@ -166,7 +166,7 @@ jobs:
 
       - name: Install CocoaPods
         working-directory: app/ios
-        run: pod install
+        run: pod install --repo-update
 
       - name: Build Unsigned iOS App
         working-directory: app
