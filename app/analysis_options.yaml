@@ -71,3 +71,4 @@ analyzer:
     avoid_print: error  # STRICT: Print is an error now
     missing_return: error
     dead_code: error
+    deprecated_member_use: ignore
