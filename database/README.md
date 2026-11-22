@@ -1,6 +1,6 @@
 # 🗄️ ApnaGate Database Architecture & Setup
 
-This directory contains the database initialization schemas, migrations, and security rules for **ApnaGate**.
+This directory contains the production database initialization schemas, security rules, and seed configurations for **ApnaGate**.
 
 ---
 
@@ -8,10 +8,7 @@ This directory contains the database initialization schemas, migrations, and sec
 
 | File | Purpose |
 |------|---------|
-| [`MASTER_SETUP.sql`](MASTER_SETUP.sql) | Complete PostgreSQL schema, tables, functions, RLS policies, and seed users for Supabase. |
-| [`add_onesignal_column.sql`](add_onesignal_column.sql) | Migration script adding `onesignal_player_id` (Subscription ID) to `profiles`. |
-| [`firestore.rules`](firestore.rules) | Security rules for Firebase Firestore (legacy/alternative backend mode). |
-| [`firestore.indexes.json`](firestore.indexes.json) | Compound indexes required for Firestore queries. |
+| [`MASTER_SETUP.sql`](MASTER_SETUP.sql) | Complete PostgreSQL schema, tables, functions, Row Level Security (RLS) policies, and seed users for Supabase. |
 
 ---
 
@@ -25,7 +22,7 @@ This directory contains the database initialization schemas, migrations, and sec
    - Create tables: `profiles`, `visitors`, `guest_passes`, `notices`, `complaints`, `complaint_chats`, `sos_alerts`, `daily_help`, `staff_attendance_logs`, `service_providers`, `household_registry`, `patrol_logs`.
    - Establish Row Level Security (RLS) policies with strict `WITH CHECK` conditions.
    - Set up security definer functions (`is_admin()`, `is_guard_or_admin()`, `is_guard()`).
-   - Enable Realtime publication replication for live updates.
+   - Enable Realtime publication replication for live updates across all client apps.
 
 ---
 

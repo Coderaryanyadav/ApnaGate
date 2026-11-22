@@ -16,7 +16,6 @@
 
 **[🏛️ System Architecture](./docs/ARCHITECTURE.md)** &nbsp;•&nbsp;
 **[🗄️ Database Setup](./database/README.md)** &nbsp;•&nbsp;
-**[🧪 Diagnostic Scripts](./scripts/README.md)** &nbsp;•&nbsp;
 **[🔔 Operations Manual](./docs/QUICK_REFERENCE.md)** &nbsp;•&nbsp;
 **[💰 Cost Analysis](./docs/COST_ANALYSIS.md)** &nbsp;•&nbsp;
 **[🤝 Contributing](./docs/CONTRIBUTING.md)** &nbsp;•&nbsp;
@@ -69,7 +68,6 @@ flowchart TD
         Guard["🛡️ Security Guard Terminal\n(Check-in, QR Scanner, Daily Help)"]
         Resident["📱 Resident Mobile Portal\n(Approvals, Guest Passes, SOS, Notices)"]
         Admin["💻 Society Operations Hub\n(User Management, Analytics, Triage)"]
-        TVCheck["📺 Lobby TV Checkpoint\n(Dynamic Rotating QR Display)"]
     end
 
     subgraph StateAndStorage["Local Client State & Cache"]
@@ -91,7 +89,6 @@ flowchart TD
     Guard --> Riverpod
     Resident --> Riverpod
     Admin --> Riverpod
-    TVCheck -.-> Postgres
 
     Riverpod <--> HiveDB
     Riverpod --> SupaAuth
@@ -186,7 +183,6 @@ The platform provides dedicated, role-gated interfaces designed for distinct ope
 ApnaGate/
 ├── 📄 README.md                           # Main engineering documentation & setup guide
 ├── 📄 LICENSE                             # MIT Open Source License
-├── 📄 package.json                        # Root commands runner & monorepo scripts
 │
 ├── 📁 app/                                # Flutter cross-platform mobile/desktop application
 │   ├── 📄 pubspec.yaml                    # Flutter dependencies & asset declarations
@@ -261,42 +257,23 @@ ApnaGate/
 │   └── 📁 scripts/
 │       └── 📄 build_optimized.sh          # Release APK build script with ABI splitting & obfuscation
 │
-├── 📁 database/                           # Database schemas, migrations & security policies
+├── 📁 database/                           # Database schemas & security policies
 │   ├── 📄 README.md                       # Complete database setup & RLS policy documentation
-│   ├── 📄 MASTER_SETUP.sql                # Complete PostgreSQL schema, RLS policies & seed data
-│   ├── 📄 add_onesignal_column.sql        # Migration adding onesignal_player_id column
-│   ├── 📄 firestore.rules                 # Cloud Firestore security rules fallback
-│   └── 📄 firestore.indexes.json          # Compound indexes for Firestore mode
+│   └── 📄 MASTER_SETUP.sql                # Complete PostgreSQL schema, RLS policies & seed data
 │
 ├── 📁 docs/                               # System documentation & technical reports
 │   ├── 📄 ARCHITECTURE.md                 # Detailed architecture overview & sequence diagrams
 │   ├── 📄 COST_ANALYSIS.md                # Lifecycle infrastructure cost breakdown & tiers
 │   ├── 📄 QUICK_REFERENCE.md              # Operations manual & notification troubleshooting
 │   ├── 📄 CONTRIBUTING.md                 # Contribution guidelines & PR checklist
-│   ├── 📄 SECURITY.md                     # Vulnerability reporting & security architecture
-│   ├── 📁 screenshots/                    # Application UI captures
-│   └── 📄 SecureGate_Smart_Building_Visitor_Notification_System.docx # Original specification document
+│   └── 📄 SECURITY.md                     # Vulnerability reporting & security architecture
 │
-├── 📁 functions/                          # Firebase Cloud Functions (fallback)
-│   ├── 📄 index.js                        # Push notification background triggers
-│   └── 📄 package.json                    # Functions dependencies
-│
-├── 📁 supabase/                           # Supabase configuration & Edge Functions
-│   ├── 📄 config.toml                     # Supabase CLI local development configuration
-│   └── 📁 functions/
-│       ├── 📄 deno.json                   # Deno runtime configuration
-│       └── 📁 send-notification/
-│           └── 📄 index.ts                # TypeScript Edge Function for OneSignal push dispatch
-│
-├── 📁 scripts/                            # Testing & diagnostic CLI tools
-│   ├── 📄 README.md                       # Diagnostic scripts usage manual
-│   ├── 📄 audit_system.dart               # End-to-end system connectivity & push audit
-│   ├── 📄 check_schema.dart               # Schema & RLS permission verification utility
-│   ├── 📄 test_full_flow.dart             # Full arrival push simulation
-│   └── 📄 test_onesignal.dart             # OneSignal credentials check
-│
-└── 📁 web/                                # Web display tools
-    └── 📄 tv_checkpoint.html              # Lobby TV dynamic QR scanner display
+└── 📁 supabase/                           # Supabase configuration & Edge Functions
+    ├── 📄 config.toml                     # Supabase CLI local development configuration
+    └── 📁 functions/
+        ├── 📄 deno.json                   # Deno runtime configuration
+        └── 📁 send-notification/
+            └── 📄 index.ts                # TypeScript Edge Function for OneSignal push dispatch
 ```
 
 ---
@@ -342,7 +319,6 @@ Every table in Supabase PostgreSQL enforces strict Row Level Security (RLS) with
 ### 1. Prerequisites
 - [Flutter SDK](https://docs.flutter.dev/get-started/install) (`v3.10` or higher)
 - [Dart SDK](https://dart.dev/get-dart) (`v3.0` or higher)
-- [Node.js](https://nodejs.org) (`v18+` for root scripts and functions)
 - A [Supabase](https://supabase.com) account and project
 - A [OneSignal](https://onesignal.com) application
 
@@ -390,14 +366,12 @@ The repository includes strict Dart static analysis and comprehensive automated 
 
 ```bash
 # Run static analysis (Strict linting - 0 errors, 0 warnings)
-npm run analyze
-# OR inside app/
-cd app && flutter analyze
+cd app
+flutter analyze
 
 # Run full test suite (14/14 tests passing)
-npm run test
-# OR inside app/
-cd app && flutter test
+cd app
+flutter test
 ```
 
 ### Automated Test Suite Coverage
@@ -414,10 +388,6 @@ cd app && flutter test
 To build an optimized, obfuscated release APK with split ABI architectures:
 
 ```bash
-# From project root
-npm run build:apk
-
-# OR execute script directly
 cd app
 bash scripts/build_optimized.sh
 ```
